@@ -6,3 +6,4 @@ dist/
 qr-storage/
 Cisco:WiPro API Documentation/
 *.log
+*.tsbuildinfo
