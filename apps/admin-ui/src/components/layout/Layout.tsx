@@ -24,7 +24,8 @@ import {
   ChevronDown,
   LogOut,
 } from 'lucide-react';
-import type { ReactNode } from 'react';
+import { useState, type ReactNode } from 'react';
+import { Building2 } from 'lucide-react';
 import './Layout.css';
 
 /** Sub-nav items shown under each venue when expanded */
@@ -52,8 +53,16 @@ export function Layout({ children }: { children: ReactNode }) {
   const location = useLocation();
 
   // Extract venueId from the URL path (e.g. /venues/abc-123/controllers)
-  const venueMatch = location.pathname.match(/^\/venues\/([^/]+)/);
+  const venueMatch = location.pathname.match(/^\/venues\/([^/]+)\//);
   const activeVenueId = venueMatch?.[1] ?? null;
+
+  // Track which venue is expanded in the sidebar (independent of URL)
+  const [expandedVenueId, setExpandedVenueId] = useState<string | null>(activeVenueId);
+
+  // Keep expanded state in sync when navigating to a venue from elsewhere
+  if (activeVenueId && activeVenueId !== expandedVenueId) {
+    setExpandedVenueId(activeVenueId);
+  }
 
   const handleLogout = async () => {
     await logout();
@@ -61,10 +70,12 @@ export function Layout({ children }: { children: ReactNode }) {
   };
 
   const handleVenueClick = (venueId: string) => {
-    if (activeVenueId === venueId) {
-      // Already viewing this venue; navigate to first sub-nav item
-      navigate(`/venues/${venueId}/controllers`);
+    if (expandedVenueId === venueId) {
+      // Collapse if already expanded
+      setExpandedVenueId(null);
     } else {
+      // Expand and navigate to first sub-nav
+      setExpandedVenueId(venueId);
       navigate(`/venues/${venueId}/controllers`);
     }
   };
@@ -94,8 +105,18 @@ export function Layout({ children }: { children: ReactNode }) {
 
           {/* Venues section */}
           <div className="nav-section-label">Venues</div>
+          <NavLink
+            to="/venues"
+            end
+            className={({ isActive }) =>
+              `nav-item ${isActive ? 'nav-item-active' : ''}`
+            }
+          >
+            <Building2 size={18} />
+            <span>Manage Venues</span>
+          </NavLink>
           {venues.map((venue) => {
-            const isExpanded = activeVenueId === venue.id;
+            const isExpanded = expandedVenueId === venue.id;
             return (
               <div key={venue.id}>
                 <div
