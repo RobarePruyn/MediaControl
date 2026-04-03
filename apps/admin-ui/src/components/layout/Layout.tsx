@@ -5,7 +5,7 @@
  * @module admin-ui/components/layout/Layout
  */
 
-import { NavLink, useNavigate, useParams } from 'react-router-dom';
+import { NavLink, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../../auth/AuthProvider.js';
 import { useVenue } from '../../context/VenueContext.js';
 import {
@@ -49,7 +49,11 @@ export function Layout({ children }: { children: ReactNode }) {
   const { user, logout, hasRole } = useAuth();
   const { venues } = useVenue();
   const navigate = useNavigate();
-  const { venueId: activeVenueId } = useParams<{ venueId: string }>();
+  const location = useLocation();
+
+  // Extract venueId from the URL path (e.g. /venues/abc-123/controllers)
+  const venueMatch = location.pathname.match(/^\/venues\/([^/]+)/);
+  const activeVenueId = venueMatch?.[1] ?? null;
 
   const handleLogout = async () => {
     await logout();
