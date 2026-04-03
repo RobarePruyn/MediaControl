@@ -105,7 +105,7 @@ export function EndpointsPage() {
         {selected.size > 0 && groups && groups.length > 0 && (
           <>
             <select value={assignGroupId} onChange={(e) => setAssignGroupId(e.target.value)}>
-              <option value="">Assign to group...</option>
+              <option value="">Assign to controller...</option>
               {groups.map((g) => (
                 <option key={g.id} value={g.id}>{g.name}</option>
               ))}
@@ -120,7 +120,7 @@ export function EndpointsPage() {
       {isLoading ? (
         <p className="empty-text">Loading...</p>
       ) : !endpoints?.length ? (
-        <p className="empty-text">No endpoints discovered. Poll a controller to discover devices.</p>
+        <p className="empty-text">No endpoints discovered. Poll a connection to discover devices.</p>
       ) : (
         <div className="data-table-wrap">
           <table>

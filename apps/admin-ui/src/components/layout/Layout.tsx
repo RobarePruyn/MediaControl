@@ -30,9 +30,9 @@ import './Layout.css';
 
 /** Sub-nav items shown under each venue when expanded */
 const VENUE_SUB_NAV = [
-  { segment: 'controllers', label: 'Controllers', icon: Cpu },
+  { segment: 'connections', label: 'Connections', icon: Cpu },
   { segment: 'endpoints', label: 'Endpoints', icon: Monitor },
-  { segment: 'groups', label: 'Groups', icon: Layers },
+  { segment: 'controllers', label: 'Controllers', icon: Layers },
   { segment: 'channels', label: 'Channels', icon: Tv },
   { segment: 'branding', label: 'Branding', icon: Palette },
   { segment: 'events', label: 'Events', icon: CalendarDays },
@@ -87,7 +87,7 @@ export function Layout({ children }: { children: ReactNode }) {
       // Expand and navigate to first sub-nav
       setExpandedVenueId(venueId);
       setManuallyCollapsed(false);
-      navigate(`/venues/${venueId}/controllers`);
+      navigate(`/venues/${venueId}/connections`);
     }
   };
 

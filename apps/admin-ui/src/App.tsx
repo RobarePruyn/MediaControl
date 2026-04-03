@@ -10,9 +10,9 @@ import { VenueProvider } from './context/VenueContext.js';
 import { Layout } from './components/layout/Layout.js';
 import { LoginPage } from './pages/LoginPage.js';
 import { DashboardPage } from './pages/DashboardPage.js';
-import { ControllersPage } from './pages/ControllersPage.js';
+import { ConnectionsPage } from './pages/ConnectionsPage.js';
 import { EndpointsPage } from './pages/EndpointsPage.js';
-import { GroupsPage } from './pages/GroupsPage.js';
+import { ControllersPage } from './pages/ControllersPage.js';
 import { ChannelsPage } from './pages/ChannelsPage.js';
 import { BrandingPage } from './pages/BrandingPage.js';
 import { EventsPage } from './pages/EventsPage.js';
@@ -41,9 +41,9 @@ export function App() {
                 <Routes>
                   <Route path="/" element={<DashboardPage />} />
                   <Route path="/venues" element={<VenuesPage />} />
-                  <Route path="/venues/:venueId/controllers" element={<ControllersPage />} />
+                  <Route path="/venues/:venueId/connections" element={<ConnectionsPage />} />
                   <Route path="/venues/:venueId/endpoints" element={<EndpointsPage />} />
-                  <Route path="/venues/:venueId/groups" element={<GroupsPage />} />
+                  <Route path="/venues/:venueId/controllers" element={<ControllersPage />} />
                   <Route path="/venues/:venueId/channels" element={<ChannelsPage />} />
                   <Route path="/venues/:venueId/branding" element={<BrandingPage />} />
                   <Route path="/venues/:venueId/events" element={<EventsPage />} />
