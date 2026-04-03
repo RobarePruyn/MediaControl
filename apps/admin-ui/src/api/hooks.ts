@@ -288,6 +288,14 @@ export function useReorderChannels(venueId: string) {
   });
 }
 
+export function useDeleteChannel(venueId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => apiDelete(`/admin/venues/${venueId}/channels/${id}`),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['venues', venueId, 'channels'] }),
+  });
+}
+
 // ─── Branding ─────────────────────────────────────────────────────────
 
 export function useBranding(venueId: string) {

@@ -11,10 +11,11 @@ import {
   useChannels,
   useCreateChannel,
   useUpdateChannel,
+  useDeleteChannel,
   useSyncChannels,
   useControllers,
 } from '../api/hooks.js';
-import { Plus, Pencil, RefreshCw } from 'lucide-react';
+import { Plus, Pencil, Trash2, RefreshCw } from 'lucide-react';
 import type { Channel } from '@suitecommand/types';
 import './pages.css';
 
@@ -26,6 +27,7 @@ export function ChannelsPage() {
   const createChannel = useCreateChannel(venueId!);
   const syncChannels = useSyncChannels(venueId!);
   const updateChannel = useUpdateChannel(venueId!);
+  const deleteChannel = useDeleteChannel(venueId!);
   const [showCreate, setShowCreate] = useState(false);
   const [editing, setEditing] = useState<Channel | null>(null);
   const [syncControllerId, setSyncControllerId] = useState('');
@@ -92,7 +94,7 @@ export function ChannelsPage() {
 
       <div className="filter-bar">
         <select value={syncControllerId} onChange={(e) => setSyncControllerId(e.target.value)}>
-          <option value="">Select controller to sync...</option>
+          <option value="">Select connection to sync...</option>
           {controllers?.map((c) => (
             <option key={c.id} value={c.id}>{c.name}</option>
           ))}
@@ -105,7 +107,7 @@ export function ChannelsPage() {
       {isLoading ? (
         <p className="empty-text">Loading...</p>
       ) : !channels?.length ? (
-        <p className="empty-text">No channels configured. Add manually or sync from a controller.</p>
+        <p className="empty-text">No channels configured. Add manually or sync from a connection.</p>
       ) : (
         <div className="data-table-wrap">
           <table>
@@ -141,6 +143,9 @@ export function ChannelsPage() {
                     <div className="row-actions">
                       <button className="btn-ghost" onClick={() => setEditing(ch)} title="Edit">
                         <Pencil size={14} />
+                      </button>
+                      <button className="btn-ghost" onClick={() => deleteChannel.mutate(ch.id)} title="Delete">
+                        <Trash2 size={14} />
                       </button>
                     </div>
                   </td>

@@ -155,5 +155,23 @@ export function createChannelRoutes(
     res.json({ success: true, data: { reordered: body.channelOrders.length } });
   });
 
+  /** DELETE /:id — Delete a channel */
+  router.delete('/:id', async (req: Request, res: Response) => {
+    const { venueId } = req as VenueScopedRequest;
+    const id = String(req.params.id);
+
+    const [existing] = await db
+      .select()
+      .from(channels)
+      .where(and(eq(channels.id, id), eq(channels.venueId, venueId)));
+
+    if (!existing) {
+      throw new AppError(ErrorCode.NOT_FOUND, 'Channel not found', 404);
+    }
+
+    await db.delete(channels).where(eq(channels.id, id));
+    res.status(204).send();
+  });
+
   return router;
 }
