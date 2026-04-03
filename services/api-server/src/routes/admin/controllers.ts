@@ -9,7 +9,7 @@ import { eq, and, isNull } from 'drizzle-orm';
 import { z } from 'zod';
 
 import type { Database } from '../../db/client.js';
-import { controllers } from '../../db/schema.js';
+import { controllers, endpoints } from '../../db/schema.js';
 import type { VenueScopedRequest } from '../../middleware/permissions.js';
 import type { BridgeClient } from '../../services/bridgeClient.js';
 import { encryptJson, decryptJson } from '../../utils/encryption.js';
@@ -217,8 +217,43 @@ export function createControllerRoutes(
       { platform: controller.platformSlug, ...config },
     );
 
+    // Upsert discovered endpoints into the DB
+    const now = new Date();
+    for (const ep of discovered) {
+      const [existing] = await db
+        .select({ id: endpoints.id })
+        .from(endpoints)
+        .where(
+          and(
+            eq(endpoints.controllerId, id),
+            eq(endpoints.platformEndpointId, ep.platformEndpointId),
+            isNull(endpoints.deletedAt),
+          ),
+        );
+
+      if (existing) {
+        await db
+          .update(endpoints)
+          .set({
+            displayName: ep.displayName,
+            deviceType: ep.deviceType,
+            lastSeenAt: now,
+          })
+          .where(eq(endpoints.id, existing.id));
+      } else {
+        await db.insert(endpoints).values({
+          controllerId: id,
+          venueId,
+          platformEndpointId: ep.platformEndpointId,
+          displayName: ep.displayName,
+          deviceType: ep.deviceType,
+          lastSeenAt: now,
+        });
+      }
+    }
+
     // Update last polled timestamp
-    await db.update(controllers).set({ lastPolledAt: new Date() }).where(eq(controllers.id, id));
+    await db.update(controllers).set({ lastPolledAt: now }).where(eq(controllers.id, id));
 
     res.json({ success: true, data: { endpoints: discovered } });
   });

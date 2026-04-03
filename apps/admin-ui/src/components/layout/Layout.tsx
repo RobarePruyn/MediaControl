@@ -24,7 +24,7 @@ import {
   ChevronDown,
   LogOut,
 } from 'lucide-react';
-import { useState, type ReactNode } from 'react';
+import { useState, useEffect, type ReactNode } from 'react';
 import { Building2 } from 'lucide-react';
 import './Layout.css';
 
@@ -59,10 +59,19 @@ export function Layout({ children }: { children: ReactNode }) {
   // Track which venue is expanded in the sidebar (independent of URL)
   const [expandedVenueId, setExpandedVenueId] = useState<string | null>(activeVenueId);
 
-  // Keep expanded state in sync when navigating to a venue from elsewhere
-  if (activeVenueId && activeVenueId !== expandedVenueId) {
-    setExpandedVenueId(activeVenueId);
-  }
+  // Track whether the user manually collapsed the current venue
+  const [manuallyCollapsed, setManuallyCollapsed] = useState(false);
+
+  // Keep expanded state in sync when navigating to a different venue
+  useEffect(() => {
+    if (activeVenueId && activeVenueId !== expandedVenueId && !manuallyCollapsed) {
+      setExpandedVenueId(activeVenueId);
+    }
+    // Reset manual collapse flag when navigating to a different venue
+    if (activeVenueId !== expandedVenueId) {
+      setManuallyCollapsed(false);
+    }
+  }, [activeVenueId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleLogout = async () => {
     await logout();
@@ -73,9 +82,11 @@ export function Layout({ children }: { children: ReactNode }) {
     if (expandedVenueId === venueId) {
       // Collapse if already expanded
       setExpandedVenueId(null);
+      setManuallyCollapsed(true);
     } else {
       // Expand and navigate to first sub-nav
       setExpandedVenueId(venueId);
+      setManuallyCollapsed(false);
       navigate(`/venues/${venueId}/controllers`);
     }
   };
