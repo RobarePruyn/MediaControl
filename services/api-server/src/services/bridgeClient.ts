@@ -104,6 +104,26 @@ export class BridgeClient {
   }
 
   /**
+   * Fetch current state for all endpoints from a controller in a single call.
+   * @param controllerId - Controller UUID
+   * @param platformSlug - Platform adapter slug
+   * @param connectionConfig - Decrypted connection config
+   * @returns Array of normalized endpoint states
+   */
+  async getAllEndpointStates(
+    controllerId: string,
+    platformSlug: string,
+    connectionConfig: PlatformConnectionConfig,
+  ): Promise<NormalizedEndpointState[]> {
+    const res = await this.post<NormalizedEndpointState[]>(`/bridge/status/${controllerId}`, {
+      platformSlug,
+      connectionConfig,
+    });
+
+    return (res as unknown as { states?: NormalizedEndpointState[] }).states ?? [];
+  }
+
+  /**
    * Get live state for a single endpoint.
    * @param controllerId - Controller UUID
    * @param platformEndpointId - Platform-native endpoint ID

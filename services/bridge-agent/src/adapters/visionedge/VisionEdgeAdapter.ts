@@ -162,6 +162,19 @@ export class VisionEdgeAdapter extends BasePlatformAdapter {
   }
 
   /**
+   * Fetch current state for all players in a single API call.
+   * Much more efficient than calling getEndpointState per-player.
+   */
+  async getAllEndpointStates(): Promise<NormalizedEndpointState[]> {
+    const { data } = await this.client.get<{
+      playerStatusList?: { playerStatus?: VEPlayerStatus[] };
+    }>('status/player');
+
+    const statuses = data.playerStatusList?.playerStatus ?? [];
+    return statuses.map((s) => this.normalizeStatus(String(s.id), s));
+  }
+
+  /**
    * Send a control command to a CVD player via the GET API flavor.
    * After the command, fetches updated state and returns it.
    */

@@ -95,6 +95,9 @@ export interface IPlatformAdapter {
   /** Send a control command. Returns updated state after command. */
   sendCommand(command: ControlCommand): Promise<NormalizedEndpointState>;
 
+  /** Optional: Fetch current state for all endpoints in a single call */
+  getAllEndpointStates?(): Promise<NormalizedEndpointState[]>;
+
   /** Optional: Fetch platform-native channel list */
   discoverChannels?(): Promise<Array<{ channelNumber: string; displayName: string }>>;
 }

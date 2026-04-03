@@ -40,6 +40,13 @@ export abstract class BasePlatformAdapter implements IPlatformAdapter {
   abstract sendCommand(command: ControlCommand): Promise<NormalizedEndpointState>;
 
   /**
+   * Optional bulk state fetch. Override in adapters that support it.
+   */
+  async getAllEndpointStates(): Promise<NormalizedEndpointState[]> {
+    return [];
+  }
+
+  /**
    * Optional channel discovery. Override in adapters that support it.
    */
   async discoverChannels(): Promise<Array<{ channelNumber: string; displayName: string }>> {

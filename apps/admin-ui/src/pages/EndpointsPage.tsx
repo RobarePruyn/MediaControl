@@ -1,13 +1,14 @@
 /**
  * Endpoints management page.
- * Lists discovered endpoints with filtering and bulk assignment.
+ * Lists discovered endpoints with filtering, bulk assignment, and status polling.
  * Venue ID is derived from the URL route parameter.
  * @module admin-ui/pages/EndpointsPage
  */
 
 import { useState } from 'react';
 import { useParams } from 'react-router-dom';
-import { useEndpoints, useGroups, useControllers, useBulkAssignEndpoints } from '../api/hooks.js';
+import { useEndpoints, useGroups, useControllers, useBulkAssignEndpoints, usePollEndpointStatus } from '../api/hooks.js';
+import { RefreshCw } from 'lucide-react';
 import './pages.css';
 
 export function EndpointsPage() {
@@ -22,9 +23,11 @@ export function EndpointsPage() {
   const { data: groups } = useGroups(venueId!);
   const { data: controllers } = useControllers(venueId!);
   const bulkAssign = useBulkAssignEndpoints(venueId!);
+  const pollStatus = usePollEndpointStatus(venueId!);
 
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [assignGroupId, setAssignGroupId] = useState('');
+  const [pollResult, setPollResult] = useState<string | null>(null);
 
   const toggleSelect = (id: string) => {
     setSelected((prev) => {
@@ -48,10 +51,42 @@ export function EndpointsPage() {
     setAssignGroupId('');
   };
 
+  const handlePollStatus = async () => {
+    setPollResult('polling...');
+    try {
+      const result = await pollStatus.mutateAsync();
+      setPollResult(`updated ${(result as { updated?: number })?.updated ?? 0} endpoints`);
+    } catch (err) {
+      setPollResult(err instanceof Error ? err.message : 'poll failed');
+    }
+  };
+
+  // Determine which state columns have data across all endpoints
+  const hasAnyPower = endpoints?.some(ep => ep.currentState?.isPoweredOn != null) ?? false;
+  const hasAnyChannel = endpoints?.some(ep => ep.currentState?.currentChannelNumber != null) ?? false;
+  const hasAnyVolume = endpoints?.some(ep => ep.currentState?.volumeLevel != null) ?? false;
+  const hasAnyInput = endpoints?.some(ep => ep.currentState?.currentInput != null) ?? false;
+  const hasAnyMute = endpoints?.some(ep => ep.currentState?.isMuted != null) ?? false;
+
   return (
     <div className="page">
       <div className="page-header">
         <h2 className="page-title">Endpoints</h2>
+        <div className="page-actions">
+          <button
+            className="btn-primary"
+            onClick={handlePollStatus}
+            disabled={pollStatus.isPending}
+          >
+            <RefreshCw size={16} className={pollStatus.isPending ? 'spin' : ''} />
+            {pollStatus.isPending ? 'Polling...' : 'Refresh Status'}
+          </button>
+          {pollResult && pollResult !== 'polling...' && (
+            <span className={`badge ${pollResult.startsWith('updated') ? 'badge-success' : 'badge-danger'}`}>
+              {pollResult}
+            </span>
+          )}
+        </div>
       </div>
 
       <div className="filter-bar">
@@ -96,9 +131,11 @@ export function EndpointsPage() {
                 </th>
                 <th>Display Name</th>
                 <th>Device Type</th>
-                <th>Power</th>
-                <th>Channel</th>
-                <th>Volume</th>
+                {hasAnyPower && <th>Power</th>}
+                {hasAnyChannel && <th>Channel</th>}
+                {hasAnyInput && <th>Input</th>}
+                {hasAnyVolume && <th>Volume</th>}
+                {hasAnyMute && <th>Mute</th>}
                 <th>Assigned</th>
                 <th>Last Seen</th>
               </tr>
@@ -111,17 +148,31 @@ export function EndpointsPage() {
                   </td>
                   <td>{ep.displayName}</td>
                   <td><span className="badge badge-info">{ep.deviceType}</span></td>
-                  <td>
-                    {ep.currentState?.isPoweredOn == null ? (
-                      <span className="badge badge-warning">unknown</span>
-                    ) : ep.currentState.isPoweredOn ? (
-                      <span className="badge badge-success">on</span>
-                    ) : (
-                      <span className="badge badge-danger">off</span>
-                    )}
-                  </td>
-                  <td>{ep.currentState?.currentChannelNumber ?? '—'}</td>
-                  <td>{ep.currentState?.volumeLevel != null ? `${ep.currentState.volumeLevel}%` : '—'}</td>
+                  {hasAnyPower && (
+                    <td>
+                      {ep.currentState?.isPoweredOn == null ? (
+                        <span className="badge">—</span>
+                      ) : ep.currentState.isPoweredOn ? (
+                        <span className="badge badge-success">on</span>
+                      ) : (
+                        <span className="badge badge-danger">off</span>
+                      )}
+                    </td>
+                  )}
+                  {hasAnyChannel && (
+                    <td>{ep.currentState?.currentChannelNumber ?? '—'}</td>
+                  )}
+                  {hasAnyInput && (
+                    <td>{ep.currentState?.currentInput ?? '—'}</td>
+                  )}
+                  {hasAnyVolume && (
+                    <td>{ep.currentState?.volumeLevel != null ? `${ep.currentState.volumeLevel}%` : '—'}</td>
+                  )}
+                  {hasAnyMute && (
+                    <td>
+                      {ep.currentState?.isMuted == null ? '—' : ep.currentState.isMuted ? 'muted' : 'unmuted'}
+                    </td>
+                  )}
                   <td>
                     {ep.isAssigned ? (
                       <span className="badge badge-success">yes</span>

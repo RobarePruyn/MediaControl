@@ -160,6 +160,14 @@ export function useBulkAssignEndpoints(venueId: string) {
   });
 }
 
+export function usePollEndpointStatus(venueId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () => apiPost<{ updated: number }>(`/admin/venues/${venueId}/endpoints/poll-status`),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['venues', venueId, 'endpoints'] }),
+  });
+}
+
 // ─── Groups ───────────────────────────────────────────────────────────
 
 export function useGroups(venueId: string) {

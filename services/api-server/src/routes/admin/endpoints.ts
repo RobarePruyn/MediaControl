@@ -9,8 +9,10 @@ import { eq, and, isNull, inArray } from 'drizzle-orm';
 import { z } from 'zod';
 
 import type { Database } from '../../db/client.js';
-import { endpoints, groupEndpoints } from '../../db/schema.js';
+import { endpoints, groupEndpoints, controllers } from '../../db/schema.js';
 import type { VenueScopedRequest } from '../../middleware/permissions.js';
+import type { BridgeClient } from '../../services/bridgeClient.js';
+import { decryptJson } from '../../utils/encryption.js';
 import { AppError, ErrorCode } from '../../errors.js';
 
 const updateSchema = z.object({
@@ -25,8 +27,14 @@ const bulkAssignSchema = z.object({
 /**
  * Create endpoint admin routes.
  * @param db - Database client
+ * @param bridgeClient - Bridge agent HTTP client
+ * @param encryptionKey - Hex-encoded AES-256 key for credential encryption
  */
-export function createEndpointRoutes(db: Database): RouterType {
+export function createEndpointRoutes(
+  db: Database,
+  bridgeClient: BridgeClient,
+  encryptionKey: string,
+): RouterType {
   const router: RouterType = Router({ mergeParams: true });
 
   /** GET / — List endpoints for venue (filterable) */
@@ -119,6 +127,56 @@ export function createEndpointRoutes(db: Database): RouterType {
       .where(inArray(endpoints.id, body.endpointIds));
 
     res.status(201).json({ success: true, data: { assigned: body.endpointIds.length } });
+  });
+
+  /** POST /poll-status — Fetch live state for all endpoints in the venue */
+  router.post('/poll-status', async (req: Request, res: Response) => {
+    const { venueId } = req as VenueScopedRequest;
+
+    // Find all active controllers for this venue
+    const venueControllers = await db
+      .select()
+      .from(controllers)
+      .where(and(eq(controllers.venueId, venueId), eq(controllers.isActive, true), isNull(controllers.deletedAt)));
+
+    let updatedCount = 0;
+
+    for (const controller of venueControllers) {
+      const config = decryptJson<Record<string, unknown>>(
+        controller.connectionConfig,
+        encryptionKey,
+      );
+
+      const states = await bridgeClient.getAllEndpointStates(
+        controller.id,
+        controller.platformSlug,
+        { platform: controller.platformSlug, ...config },
+      );
+
+      // Update each endpoint's currentState in the DB
+      for (const state of states) {
+        const [existing] = await db
+          .select({ id: endpoints.id })
+          .from(endpoints)
+          .where(
+            and(
+              eq(endpoints.controllerId, controller.id),
+              eq(endpoints.platformEndpointId, state.platformEndpointId),
+              isNull(endpoints.deletedAt),
+            ),
+          );
+
+        if (existing) {
+          await db
+            .update(endpoints)
+            .set({ currentState: state, lastSeenAt: new Date() })
+            .where(eq(endpoints.id, existing.id));
+          updatedCount++;
+        }
+      }
+    }
+
+    res.json({ success: true, data: { updated: updatedCount } });
   });
 
   return router;

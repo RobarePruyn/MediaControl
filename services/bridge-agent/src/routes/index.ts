@@ -99,6 +99,30 @@ bridgeRouter.post('/channels/:controllerId', async (req: Request, res: Response)
 });
 
 /**
+ * POST /bridge/status/:controllerId
+ * Get live state for all endpoints from a controller in a single call.
+ */
+bridgeRouter.post('/status/:controllerId', async (req: Request, res: Response) => {
+  try {
+    const { connectionConfig, platformSlug } = z.object({
+      connectionConfig: connectionConfigSchema,
+      platformSlug: z.string(),
+    }).parse(req.body);
+
+    const adapter = createAdapter(platformSlug, connectionConfig);
+    const states = await adapter.getAllEndpointStates();
+
+    res.json({ success: true, states });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Unknown error';
+    res.status(500).json({
+      success: false,
+      error: { code: 'STATUS_FETCH_FAILED', message },
+    });
+  }
+});
+
+/**
  * GET /bridge/state/:controllerId/:platformEndpointId
  * Get live state for a single endpoint.
  */

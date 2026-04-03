@@ -92,7 +92,7 @@ adminRouter.use('/identity-providers', requireRole('super_admin', 'app_admin'), 
 const venueRouter = express.Router({ mergeParams: true });
 venueRouter.use(requireVenueAccess(db));
 venueRouter.use('/controllers', createControllerRoutes(db, bridgeClient, config.CREDENTIAL_ENCRYPTION_KEY));
-venueRouter.use('/endpoints', createEndpointRoutes(db));
+venueRouter.use('/endpoints', createEndpointRoutes(db, bridgeClient, config.CREDENTIAL_ENCRYPTION_KEY));
 venueRouter.use('/groups', createGroupRoutes(db, qrService));
 venueRouter.use('/channels', createChannelRoutes(db, bridgeClient, config.CREDENTIAL_ENCRYPTION_KEY));
 venueRouter.use('/branding', createBrandingRoutes(db));
