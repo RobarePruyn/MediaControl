@@ -13,6 +13,12 @@ import { App } from './App.js';
 import { AuthProvider } from './auth/AuthProvider.js';
 import './index.css';
 
+/** Build timestamp injected by Vite — forces unique content hash per deploy */
+declare const __BUILD_TIME__: string;
+if (typeof __BUILD_TIME__ !== 'undefined') {
+  console.debug(`[SuiteCommand Admin] Build: ${__BUILD_TIME__}`);
+}
+
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
