@@ -122,6 +122,7 @@ export function ControllersPage() {
   const pollController = usePollController(venueId!);
   const [showCreate, setShowCreate] = useState(false);
   const [testResult, setTestResult] = useState<Record<string, string>>({});
+  const [pollResult, setPollResult] = useState<Record<string, string>>({});
 
   // Create form state
   const [name, setName] = useState('');
@@ -203,6 +204,17 @@ export function ControllersPage() {
     }
   };
 
+  const handlePoll = async (id: string) => {
+    setPollResult((prev) => ({ ...prev, [id]: 'polling...' }));
+    try {
+      const result = await pollController.mutateAsync(id);
+      const count = (result as { endpoints?: unknown[] })?.endpoints?.length ?? 0;
+      setPollResult((prev) => ({ ...prev, [id]: `discovered ${count} endpoint${count !== 1 ? 's' : ''}` }));
+    } catch (err) {
+      setPollResult((prev) => ({ ...prev, [id]: err instanceof Error ? err.message : 'poll failed' }));
+    }
+  };
+
   const currentCreateFields = PLATFORM_FIELDS[platformSlug] ?? [];
   const currentEditFields = editing ? (PLATFORM_FIELDS[editing.platformSlug] ?? []) : [];
 
@@ -253,8 +265,8 @@ export function ControllersPage() {
                       <button className="btn-ghost" onClick={() => handleTest(c.id)} title="Test Connection">
                         <Plug size={14} />
                       </button>
-                      <button className="btn-ghost" onClick={() => pollController.mutate(c.id)} title="Poll Endpoints">
-                        <RefreshCw size={14} />
+                      <button className="btn-ghost" onClick={() => handlePoll(c.id)} title="Poll Endpoints" disabled={pollResult[c.id] === 'polling...'}>
+                        <RefreshCw size={14} className={pollResult[c.id] === 'polling...' ? 'spin' : ''} />
                       </button>
                       <button className="btn-ghost" onClick={() => deleteController.mutate(c.id)} title="Delete">
                         <Trash2 size={14} />
@@ -263,6 +275,11 @@ export function ControllersPage() {
                     {testResult[c.id] && (
                       <span className={`badge ${testResult[c.id] === 'success' ? 'badge-success' : testResult[c.id] === 'testing...' ? 'badge-info' : 'badge-danger'}`} style={{ marginTop: 4, display: 'inline-block' }}>
                         {testResult[c.id]}
+                      </span>
+                    )}
+                    {pollResult[c.id] && (
+                      <span className={`badge ${pollResult[c.id] === 'polling...' ? 'badge-info' : pollResult[c.id].startsWith('discovered') ? 'badge-success' : 'badge-danger'}`} style={{ marginTop: 4, display: 'inline-block' }}>
+                        {pollResult[c.id]}
                       </span>
                     )}
                   </td>

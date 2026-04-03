@@ -1,5 +1,13 @@
 /* Shared page styles for the admin UI */
 
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+.spin {
+  animation: spin 1s linear infinite;
+}
+
 .page {
   max-width: 1200px;
 }
