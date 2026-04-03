@@ -68,7 +68,7 @@ export function createVisionEdgeClient(config: VisionEdgeConnectionConfig) {
 
   const httpClient: AxiosInstance = axios.create({
     baseURL: `${baseUrl.replace(/\/$/, '')}${API_BASE_PATH}`,
-    timeout: 15000,
+    timeout: 60000,
     headers: {
       'Accept': 'application/xml',
       'Authorization': buildBasicAuth(config.pin),

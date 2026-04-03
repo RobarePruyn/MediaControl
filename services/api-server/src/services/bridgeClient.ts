@@ -195,6 +195,7 @@ export class BridgeClient {
         [INTERNAL_SECRET_HEADER]: this.secret,
       },
       body: JSON.stringify(body),
+      signal: AbortSignal.timeout(90000),
     });
 
     const data = (await response.json()) as BridgeResponse<T>;
