@@ -13,6 +13,9 @@ export type UserRole = 'meta_admin' | 'site_admin' | 'operator';
 /** Group types representing physical spaces in a venue */
 export type GroupType = 'suite' | 'room' | 'zone' | 'boh';
 
+/** Access tiers for group access tokens — determines rotation behavior */
+export type AccessTier = 'event' | 'seasonal' | 'permanent';
+
 /** Tenant — top-level organizational unit */
 export interface Tenant {
   id: string;
@@ -33,6 +36,8 @@ export interface Venue {
   primaryColor: string | null;
   secondaryColor: string | null;
   accentColor: string | null;
+  /** IANA timezone string (e.g., "America/New_York") — used for token rotation ceiling */
+  timezone: string;
   createdAt: string;
 }
 
@@ -95,10 +100,56 @@ export interface Group {
   name: string;
   type: GroupType;
   description: string | null;
-  accessToken: string;
-  qrCodeUrl: string | null;
   createdAt: string;
   deletedAt: string | null;
+}
+
+/** Event — a scheduled occurrence at a venue that drives token rotation */
+export interface Event {
+  id: string;
+  venueId: string;
+  name: string;
+  startsAt: string;
+  endsAt: string;
+  /** Token activates this many minutes before event start */
+  preAccessMinutes: number;
+  /** Token valid until this many minutes after event end */
+  postAccessMinutes: number;
+  createdAt: string;
+  deletedAt: string | null;
+}
+
+/** Group access token — the QR code payload that gates control access */
+export interface GroupAccessToken {
+  id: string;
+  groupId: string;
+  /** URL-safe random string: /control/{token} */
+  token: string;
+  accessTier: AccessTier;
+  /** NULL = valid immediately */
+  validFrom: string | null;
+  /** NULL = no scheduled expiry (seasonal/permanent) */
+  validUntil: string | null;
+  /** NULL for seasonal/permanent tokens */
+  eventId: string | null;
+  isActive: boolean;
+  /** Set when this token is superseded by a new one */
+  rotatedAt: string | null;
+  createdAt: string;
+}
+
+/** SSO configuration for OIDC provider per tenant */
+export interface SsoConfig {
+  id: string;
+  tenantId: string;
+  providerName: string | null;
+  /** OIDC discovery endpoint base URL */
+  issuerUrl: string | null;
+  clientId: string | null;
+  /** Never returned to clients — encrypted at rest */
+  clientSecretEnc?: string;
+  isActive: boolean;
+  createdAt: string;
 }
 
 /** Association between a group and an endpoint with display ordering */

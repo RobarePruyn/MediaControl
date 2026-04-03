@@ -4,7 +4,7 @@
  * @module @suitecommand/types/api
  */
 
-import type { GroupType, IdpProtocol, PlanTier, TriggerActionType, TriggerTargetType, UserRole } from './tenant.js';
+import type { AccessTier, GroupType, IdpProtocol, PlanTier, TriggerActionType, TriggerTargetType, UserRole } from './tenant.js';
 
 // ─── Common Response Wrappers ──────────────────────────────────────────
 
@@ -177,6 +177,56 @@ export interface CreateVenueRequest {
   name: string;
   slug: string;
   tenantId: string;
+  timezone?: string;
+}
+
+// ─── Admin: Events ─────────────────────────────────────────────────────
+
+/** Create event request */
+export interface CreateEventRequest {
+  venueId: string;
+  name: string;
+  startsAt: string;
+  endsAt: string;
+  preAccessMinutes?: number;
+  postAccessMinutes?: number;
+}
+
+/** Update event request */
+export interface UpdateEventRequest {
+  name?: string;
+  startsAt?: string;
+  endsAt?: string;
+  preAccessMinutes?: number;
+  postAccessMinutes?: number;
+}
+
+// ─── Admin: Group Access Tokens ────────────────────────────────────────
+
+/** Create group access token request */
+export interface CreateGroupAccessTokenRequest {
+  groupId: string;
+  accessTier: AccessTier;
+  eventId?: string;
+  validFrom?: string;
+  validUntil?: string;
+}
+
+/** Rotate (invalidate current, create new) group access token */
+export interface RotateGroupAccessTokenRequest {
+  groupId: string;
+  accessTier: AccessTier;
+  eventId?: string;
+}
+
+// ─── Admin: SSO Config ─────────────────────────────────────────────────
+
+/** Create/update SSO config request */
+export interface UpsertSsoConfigRequest {
+  providerName: string;
+  issuerUrl: string;
+  clientId: string;
+  clientSecret: string;
 }
 
 // ─── Bridge Agent Internal API ─────────────────────────────────────────

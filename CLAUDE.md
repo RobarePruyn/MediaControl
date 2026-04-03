@@ -798,5 +798,92 @@ Implement in this sequence to avoid circular dependencies and allow incremental 
 
 ---
 
+---
+
+## 20. AUTH MODEL ADDENDUM
+
+**Supersedes**: Section 13 item 1 (auth lifetimes), item 5 (control UI unauthenticated), and the `groups` table `access_token` field from Section 5.
+
+### 20.1 User Categories and Auth Methods
+
+**BOH Staff** (back-of-house):
+- Primary auth: OIDC/OAuth2 against the venue's IdP (assume Azure AD / Entra ID unless specified otherwise). User lifecycle managed in IdP — disabling the AD account revokes SuiteCommand access.
+- Fallback auth: Local email + password (bcrypt, min cost factor 12) for venues without an IdP.
+- Session: JWT access token (15-min expiry) + refresh token (14-day expiry, rotated on use, stored hashed). One-time auth per device.
+- BOH users get real records in `users` with assigned role and authorized groups.
+
+**Suite Users** (guests — unauthenticated):
+- Access via QR code. No login. No account.
+- Three access tiers determining token rotation:
+
+| Tier | Who | Rotation |
+|---|---|---|
+| `event` | Temporary suiteholders, day-of guests | Auto-rotates. Hard ceiling: 3:00 AM local time. |
+| `seasonal` | Suite owners with full-season lease | Admin-triggered rotation only. Stable for the season. |
+| `permanent` | Fixed BOH installations | Admin-triggered only. No expiry. |
+
+- Seasonal owners may optionally get a magic link account (email only, no password) for viewing their QR code and last-used timestamp. This is a separate lightweight flow, not part of the main user/role system.
+
+### 20.2 Group Access Token Design
+
+Access tokens live in `group_access_tokens` (not on the `groups` table). Token rotation is managed per the access tier. QR codes encode `/control/{token}` where `token` comes from `group_access_tokens.token`.
+
+The `events` table drives automatic rotation for event-tier tokens: each event defines a validity window (starts_at - pre_access_minutes to ends_at + post_access_minutes).
+
+### 20.3 Token Validity Logic
+
+Use `isTokenCurrentlyValid(token, venueTimezone)` as a shared utility called on every page load, every command, and every WebSocket connect:
+- Revoked or superseded tokens (`!isActive || rotatedAt !== null`) are always invalid.
+- Seasonal and permanent tiers have no time-based expiry.
+- Event-tier tokens enforce both the event window AND a hard 3:00 AM local-time daily ceiling.
+- Event-tier tokens with no event attached are never valid (prevents orphaned access).
+
+Use `date-fns-tz` for timezone handling. Venue timezone stored on `venues.timezone`.
+
+**WebSocket grace window**: When a token expires mid-session, allow a 45-minute grace window for existing connections only. New connections after expiry are rejected immediately.
+
+### 20.4 Daily Rotation Cron Job
+
+`node-cron` job within api-server. Runs every 15 minutes, checks per-venue whether current time is in the 2:55–3:00 AM window for that venue's timezone. For each venue in-window:
+1. Rotate all active event-tier tokens (set `rotated_at`, `is_active = false`).
+2. Find events starting within the next 24 hours.
+3. Pre-generate new tokens for affected groups with validity windows.
+4. Regenerate QR code PNGs.
+5. Write audit log entry with rotation summary.
+
+### 20.5 OIDC Integration
+
+Use `openid-client` npm package. Store OIDC config per tenant in `sso_configs` table. OIDC callback: `GET /api/auth/oidc/callback`. On successful login, match or create user by email claim. Role assignment by admin config, not IdP claims.
+
+### 20.6 Control Command Security (Replaces Section 13 Item 5)
+
+Control commands are unauthenticated but token-gated:
+1. Validate token exists and passes `isTokenCurrentlyValid()`. Return `403` if not.
+2. Rate-limit per token per IP: max 10 commands per 10 seconds (Redis-backed).
+3. Log to `audit_log` with `entity_type = 'group_access_token'`.
+
+Control UI must handle `403` gracefully — show "Access has expired" with venue branding intact.
+
+### 20.7 API Routes — Events
+
+```
+GET    /api/admin/events                       List events for venue
+POST   /api/admin/events                       Create event
+GET    /api/admin/events/:id                   Get event
+PATCH  /api/admin/events/:id                   Update event
+DELETE /api/admin/events/:id                   Soft delete
+```
+
+### 20.8 API Routes — Group Access Tokens
+
+```
+GET    /api/admin/groups/:id/tokens            List tokens for group (incl. history)
+POST   /api/admin/groups/:id/tokens            Create new access token for group
+POST   /api/admin/groups/:id/tokens/rotate     Rotate (invalidate current, generate new)
+DELETE /api/admin/groups/:id/tokens/:tokenId   Revoke specific token
+```
+
+---
+
 *End of SuiteCommand Phase 1 Specification*
 *Generated as a Claude Code kickoff document — feed this as CLAUDE.md to Claude Code to begin scaffolding.*

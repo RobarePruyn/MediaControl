@@ -23,6 +23,7 @@ import {
 export const planTierEnum = pgEnum('plan_tier', ['basic', 'professional', 'enterprise']);
 export const userRoleEnum = pgEnum('user_role', ['meta_admin', 'site_admin', 'operator']);
 export const groupTypeEnum = pgEnum('group_type', ['suite', 'room', 'zone', 'boh']);
+export const accessTierEnum = pgEnum('access_tier', ['event', 'seasonal', 'permanent']);
 export const idpProtocolEnum = pgEnum('idp_protocol', ['oidc', 'saml', 'ldap']);
 export const triggerActionTypeEnum = pgEnum('trigger_action_type', ['command', 'delay', 'conditional']);
 export const triggerExecutionStateEnum = pgEnum('trigger_execution_state', ['running', 'completed', 'failed', 'cancelled']);
@@ -50,6 +51,8 @@ export const venues = pgTable('venues', {
   primaryColor: varchar('primary_color', { length: 20 }),
   secondaryColor: varchar('secondary_color', { length: 20 }),
   accentColor: varchar('accent_color', { length: 20 }),
+  /** IANA timezone string — required for daily token rotation ceiling calculation */
+  timezone: varchar('timezone', { length: 64 }).notNull().default('America/New_York'),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   deletedAt: timestamp('deleted_at', { withTimezone: true }),
 }, (table) => [
@@ -120,14 +123,53 @@ export const groups = pgTable('groups', {
   name: varchar('name', { length: 255 }).notNull(),
   type: groupTypeEnum('type').notNull(),
   description: text('description'),
-  /** Short URL-safe token for QR code access: /control/{access_token} */
-  accessToken: varchar('access_token', { length: 32 }).notNull().unique(),
-  qrCodeUrl: text('qr_code_url'),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   deletedAt: timestamp('deleted_at', { withTimezone: true }),
 }, (table) => [
   index('groups_venue_id_idx').on(table.venueId),
-  index('groups_access_token_idx').on(table.accessToken),
+]);
+
+// ─── Events ────────────────────────────────────────────────────────────
+
+export const events = pgTable('events', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  venueId: uuid('venue_id').notNull().references(() => venues.id),
+  name: varchar('name', { length: 255 }).notNull(),
+  startsAt: timestamp('starts_at', { withTimezone: true }).notNull(),
+  endsAt: timestamp('ends_at', { withTimezone: true }).notNull(),
+  /** Token activates this many minutes before event start */
+  preAccessMinutes: integer('pre_access_minutes').notNull().default(120),
+  /** Token valid until this many minutes after event end */
+  postAccessMinutes: integer('post_access_minutes').notNull().default(60),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  deletedAt: timestamp('deleted_at', { withTimezone: true }),
+}, (table) => [
+  index('events_venue_id_idx').on(table.venueId),
+  index('events_starts_at_idx').on(table.startsAt),
+]);
+
+// ─── Group Access Tokens ───────────────────────────────────────────────
+
+export const groupAccessTokens = pgTable('group_access_tokens', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  groupId: uuid('group_id').notNull().references(() => groups.id),
+  /** URL-safe random string — the QR code payload: /control/{token} */
+  token: varchar('token', { length: 24 }).notNull().unique(),
+  accessTier: accessTierEnum('access_tier').notNull(),
+  /** NULL = valid immediately */
+  validFrom: timestamp('valid_from', { withTimezone: true }),
+  /** NULL = no scheduled expiry (seasonal/permanent) */
+  validUntil: timestamp('valid_until', { withTimezone: true }),
+  /** NULL for seasonal/permanent tokens */
+  eventId: uuid('event_id').references(() => events.id),
+  isActive: boolean('is_active').notNull().default(true),
+  /** Set when this token is superseded by a new one */
+  rotatedAt: timestamp('rotated_at', { withTimezone: true }),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+}, (table) => [
+  index('group_access_tokens_group_id_idx').on(table.groupId),
+  index('group_access_tokens_token_idx').on(table.token),
+  index('group_access_tokens_event_id_idx').on(table.eventId),
 ]);
 
 // ─── Group Endpoints (Many-to-Many) ───────────────────────────────────
@@ -247,6 +289,23 @@ export const identityProviders = pgTable('identity_providers', {
   index('identity_providers_tenant_id_idx').on(table.tenantId),
 ]);
 
+// ─── SSO Configs (OIDC Provider per Tenant) ───────────────────────────
+
+export const ssoConfigs = pgTable('sso_configs', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  tenantId: uuid('tenant_id').notNull().references(() => tenants.id),
+  providerName: varchar('provider_name', { length: 64 }),
+  /** OIDC discovery endpoint base URL */
+  issuerUrl: varchar('issuer_url', { length: 512 }),
+  clientId: varchar('client_id', { length: 255 }),
+  /** Encrypted with CREDENTIAL_ENCRYPTION_KEY */
+  clientSecretEnc: text('client_secret_enc'),
+  isActive: boolean('is_active').notNull().default(true),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+}, (table) => [
+  index('sso_configs_tenant_id_idx').on(table.tenantId),
+]);
+
 // ─── TLS Certificates ─────────────────────────────────────────────────
 
 export const tlsCertificates = pgTable('tls_certificates', {
@@ -323,6 +382,7 @@ export const tenantsRelations = relations(tenants, ({ many }) => ({
   venues: many(venues),
   users: many(users),
   identityProviders: many(identityProviders),
+  ssoConfigs: many(ssoConfigs),
   tlsCertificates: many(tlsCertificates),
 }));
 
@@ -331,6 +391,7 @@ export const venuesRelations = relations(venues, ({ one, many }) => ({
   controllers: many(controllers),
   endpoints: many(endpoints),
   groups: many(groups),
+  events: many(events),
   channels: many(channels),
   triggers: many(triggers),
   brandingConfig: one(brandingConfigs, { fields: [venues.id], references: [brandingConfigs.venueId] }),
@@ -354,7 +415,18 @@ export const endpointsRelations = relations(endpoints, ({ one, many }) => ({
 export const groupsRelations = relations(groups, ({ one, many }) => ({
   venue: one(venues, { fields: [groups.venueId], references: [venues.id] }),
   groupEndpoints: many(groupEndpoints),
+  accessTokens: many(groupAccessTokens),
   channelList: one(groupChannelLists, { fields: [groups.id], references: [groupChannelLists.groupId] }),
+}));
+
+export const eventsRelations = relations(events, ({ one, many }) => ({
+  venue: one(venues, { fields: [events.venueId], references: [venues.id] }),
+  accessTokens: many(groupAccessTokens),
+}));
+
+export const groupAccessTokensRelations = relations(groupAccessTokens, ({ one }) => ({
+  group: one(groups, { fields: [groupAccessTokens.groupId], references: [groups.id] }),
+  event: one(events, { fields: [groupAccessTokens.eventId], references: [events.id] }),
 }));
 
 export const groupEndpointsRelations = relations(groupEndpoints, ({ one }) => ({
@@ -387,6 +459,10 @@ export const refreshTokensRelations = relations(refreshTokens, ({ one }) => ({
 
 export const identityProvidersRelations = relations(identityProviders, ({ one }) => ({
   tenant: one(tenants, { fields: [identityProviders.tenantId], references: [tenants.id] }),
+}));
+
+export const ssoConfigsRelations = relations(ssoConfigs, ({ one }) => ({
+  tenant: one(tenants, { fields: [ssoConfigs.tenantId], references: [tenants.id] }),
 }));
 
 export const triggersRelations = relations(triggers, ({ one, many }) => ({
