@@ -4,15 +4,17 @@
  * @module admin-ui/pages/ChannelsPage
  */
 
-import { useState, type FormEvent } from 'react';
+import { useState, useEffect, type FormEvent } from 'react';
 import {
   useChannels,
   useCreateChannel,
+  useUpdateChannel,
   useSyncChannels,
   useControllers,
   useVenues,
 } from '../api/hooks.js';
-import { Plus, RefreshCw } from 'lucide-react';
+import { Plus, Pencil, RefreshCw } from 'lucide-react';
+import type { Channel } from '@suitecommand/types';
 import './pages.css';
 
 export function ChannelsPage() {
@@ -21,8 +23,36 @@ export function ChannelsPage() {
   const { data: venues } = useVenues();
   const createChannel = useCreateChannel();
   const syncChannels = useSyncChannels();
+  const updateChannel = useUpdateChannel();
   const [showCreate, setShowCreate] = useState(false);
+  const [editing, setEditing] = useState<Channel | null>(null);
   const [syncControllerId, setSyncControllerId] = useState('');
+
+  const [editDisplayName, setEditDisplayName] = useState('');
+  const [editLogoUrl, setEditLogoUrl] = useState('');
+  const [editCategory, setEditCategory] = useState('');
+  const [editIsActive, setEditIsActive] = useState(true);
+
+  useEffect(() => {
+    if (editing) {
+      setEditDisplayName(editing.displayName);
+      setEditLogoUrl(editing.logoUrl || '');
+      setEditCategory(editing.category || '');
+      setEditIsActive(editing.isActive);
+    }
+  }, [editing]);
+
+  const handleEdit = async (e: FormEvent) => {
+    e.preventDefault();
+    await updateChannel.mutateAsync({
+      id: editing!.id,
+      displayName: editDisplayName,
+      logoUrl: editLogoUrl || undefined,
+      category: editCategory || undefined,
+      isActive: editIsActive,
+    });
+    setEditing(null);
+  };
 
   const [displayName, setDisplayName] = useState('');
   const [channelNumber, setChannelNumber] = useState('');
@@ -85,6 +115,7 @@ export function ChannelsPage() {
                 <th>Category</th>
                 <th>Status</th>
                 <th>Logo</th>
+                <th>Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -104,6 +135,13 @@ export function ChannelsPage() {
                     {ch.logoUrl ? (
                       <img src={ch.logoUrl} alt="" style={{ height: 24, borderRadius: 4 }} />
                     ) : '—'}
+                  </td>
+                  <td>
+                    <div className="row-actions">
+                      <button className="btn-ghost" onClick={() => setEditing(ch)} title="Edit">
+                        <Pencil size={14} />
+                      </button>
+                    </div>
                   </td>
                 </tr>
               ))}
@@ -143,6 +181,44 @@ export function ChannelsPage() {
                 <button type="button" className="btn-ghost" onClick={() => setShowCreate(false)}>Cancel</button>
                 <button type="submit" className="btn-primary" disabled={createChannel.isPending}>
                   {createChannel.isPending ? 'Creating...' : 'Create'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+      {editing && (
+        <div className="modal-overlay" onClick={() => setEditing(null)}>
+          <div className="modal" onClick={(e) => e.stopPropagation()}>
+            <h3 className="modal-title">Edit Channel</h3>
+            <form onSubmit={handleEdit}>
+              <div className="form-group">
+                <label>Display Name</label>
+                <input value={editDisplayName} onChange={(e) => setEditDisplayName(e.target.value)} required autoFocus />
+              </div>
+              <div className="form-group">
+                <label>Logo URL (optional)</label>
+                <input value={editLogoUrl} onChange={(e) => setEditLogoUrl(e.target.value)} />
+              </div>
+              <div className="form-group">
+                <label>Category (optional)</label>
+                <input value={editCategory} onChange={(e) => setEditCategory(e.target.value)} />
+              </div>
+              <div className="form-group">
+                <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                  <input
+                    type="checkbox"
+                    checked={editIsActive}
+                    onChange={(e) => setEditIsActive(e.target.checked)}
+                    style={{ width: 'auto' }}
+                  />
+                  Active
+                </label>
+              </div>
+              <div className="modal-actions">
+                <button type="button" className="btn-ghost" onClick={() => setEditing(null)}>Cancel</button>
+                <button type="submit" className="btn-primary" disabled={updateChannel.isPending}>
+                  {updateChannel.isPending ? 'Saving...' : 'Save'}
                 </button>
               </div>
             </form>

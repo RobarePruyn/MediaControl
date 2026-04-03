@@ -4,16 +4,18 @@
  * @module admin-ui/pages/ControllersPage
  */
 
-import { useState, type FormEvent } from 'react';
+import { useState, useEffect, type FormEvent } from 'react';
 import {
   useControllers,
   useCreateController,
+  useUpdateController,
   useDeleteController,
   useTestController,
   usePollController,
   useVenues,
 } from '../api/hooks.js';
-import { Plus, Plug, RefreshCw, Trash2 } from 'lucide-react';
+import { Plus, Pencil, Plug, RefreshCw, Trash2 } from 'lucide-react';
+import type { Controller } from '@suitecommand/types';
 import './pages.css';
 
 export function ControllersPage() {
@@ -32,6 +34,22 @@ export function ControllersPage() {
   const [baseUrl, setBaseUrl] = useState('');
   const [apiKey, setApiKey] = useState('');
 
+  const [editing, setEditing] = useState<Controller | null>(null);
+  const updateController = useUpdateController(editing?.id ?? '');
+  const [editName, setEditName] = useState('');
+  const [editBaseUrl, setEditBaseUrl] = useState('');
+  const [editApiKey, setEditApiKey] = useState('');
+  const [editActive, setEditActive] = useState(true);
+
+  useEffect(() => {
+    if (editing) {
+      setEditName(editing.name);
+      setEditBaseUrl('');
+      setEditApiKey('');
+      setEditActive(editing.isActive);
+    }
+  }, [editing]);
+
   const handleCreate = async (e: FormEvent) => {
     e.preventDefault();
     await createController.mutateAsync({
@@ -44,6 +62,21 @@ export function ControllersPage() {
     setName('');
     setBaseUrl('');
     setApiKey('');
+  };
+
+  const handleEdit = async (e: FormEvent) => {
+    e.preventDefault();
+    if (!editing) return;
+    const body: Record<string, unknown> = { name: editName, isActive: editActive };
+    if (editBaseUrl || editApiKey) {
+      body.connectionConfig = {
+        platform: editing.platformSlug,
+        baseUrl: editBaseUrl || undefined,
+        apiKey: editApiKey || undefined,
+      };
+    }
+    await updateController.mutateAsync(body);
+    setEditing(null);
   };
 
   const handleTest = async (id: string) => {
@@ -93,6 +126,9 @@ export function ControllersPage() {
                   <td>{c.lastPolledAt ? new Date(c.lastPolledAt).toLocaleString() : 'Never'}</td>
                   <td>
                     <div className="row-actions">
+                      <button className="btn-ghost" onClick={() => setEditing(c)} title="Edit Controller">
+                        <Pencil size={14} />
+                      </button>
                       <button className="btn-ghost" onClick={() => handleTest(c.id)} title="Test Connection">
                         <Plug size={14} />
                       </button>
@@ -113,6 +149,53 @@ export function ControllersPage() {
               ))}
             </tbody>
           </table>
+        </div>
+      )}
+
+      {editing && (
+        <div className="modal-overlay" onClick={() => setEditing(null)}>
+          <div className="modal" onClick={(e) => e.stopPropagation()}>
+            <h3 className="modal-title">Edit Controller</h3>
+            <form onSubmit={handleEdit}>
+              <div className="form-group">
+                <label>Name</label>
+                <input value={editName} onChange={(e) => setEditName(e.target.value)} required autoFocus />
+              </div>
+              <div className="form-group">
+                <label>Base URL</label>
+                <input
+                  value={editBaseUrl}
+                  onChange={(e) => setEditBaseUrl(e.target.value)}
+                  placeholder="Leave blank to keep current"
+                />
+              </div>
+              <div className="form-group">
+                <label>API Key</label>
+                <input
+                  type="password"
+                  value={editApiKey}
+                  onChange={(e) => setEditApiKey(e.target.value)}
+                  placeholder="Leave blank to keep current"
+                />
+              </div>
+              <div className="form-group">
+                <label style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <input
+                    type="checkbox"
+                    checked={editActive}
+                    onChange={(e) => setEditActive(e.target.checked)}
+                  />
+                  Active
+                </label>
+              </div>
+              <div className="modal-actions">
+                <button type="button" className="btn-ghost" onClick={() => setEditing(null)}>Cancel</button>
+                <button type="submit" className="btn-primary" disabled={updateController.isPending}>
+                  {updateController.isPending ? 'Saving...' : 'Save'}
+                </button>
+              </div>
+            </form>
+          </div>
         </div>
       )}
 

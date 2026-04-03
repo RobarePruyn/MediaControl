@@ -4,10 +4,11 @@
  * @module admin-ui/pages/GroupsPage
  */
 
-import { useState, type FormEvent } from 'react';
+import { useState, useEffect, type FormEvent } from 'react';
 import {
   useGroups,
   useCreateGroup,
+  useUpdateGroup,
   useDeleteGroup,
   useGroupTokens,
   useCreateGroupToken,
@@ -15,8 +16,8 @@ import {
   useRevokeGroupToken,
   useVenues,
 } from '../api/hooks.js';
-import { Plus, Key, Trash2, RefreshCw, Copy } from 'lucide-react';
-import type { AccessTier, GroupAccessToken } from '@suitecommand/types';
+import { Plus, Pencil, Key, Trash2, RefreshCw, Copy } from 'lucide-react';
+import type { AccessTier, Group, GroupAccessToken } from '@suitecommand/types';
 import './pages.css';
 
 export function GroupsPage() {
@@ -25,7 +26,32 @@ export function GroupsPage() {
   const createGroup = useCreateGroup();
   const deleteGroup = useDeleteGroup();
   const [showCreate, setShowCreate] = useState(false);
+  const [editing, setEditing] = useState<Group | null>(null);
   const [tokenGroupId, setTokenGroupId] = useState<string | null>(null);
+
+  const updateGroup = useUpdateGroup(editing?.id ?? '');
+
+  const [editName, setEditName] = useState('');
+  const [editType, setEditType] = useState<'suite' | 'room' | 'zone' | 'boh'>('suite');
+  const [editDescription, setEditDescription] = useState('');
+
+  useEffect(() => {
+    if (editing) {
+      setEditName(editing.name);
+      setEditType(editing.type as 'suite' | 'room' | 'zone' | 'boh');
+      setEditDescription(editing.description || '');
+    }
+  }, [editing]);
+
+  const handleEdit = async (e: FormEvent) => {
+    e.preventDefault();
+    await updateGroup.mutateAsync({
+      name: editName,
+      type: editType,
+      description: editDescription || undefined,
+    });
+    setEditing(null);
+  };
 
   const [name, setName] = useState('');
   const [type, setType] = useState<'suite' | 'room' | 'zone' | 'boh'>('suite');
@@ -77,6 +103,9 @@ export function GroupsPage() {
                   <td>{g.description || '—'}</td>
                   <td>
                     <div className="row-actions">
+                      <button className="btn-ghost" onClick={() => setEditing(g)} title="Edit">
+                        <Pencil size={14} />
+                      </button>
                       <button className="btn-ghost" onClick={() => setTokenGroupId(g.id)} title="Manage Tokens">
                         <Key size={14} />
                       </button>
@@ -128,6 +157,39 @@ export function GroupsPage() {
                 <button type="button" className="btn-ghost" onClick={() => setShowCreate(false)}>Cancel</button>
                 <button type="submit" className="btn-primary" disabled={createGroup.isPending}>
                   {createGroup.isPending ? 'Creating...' : 'Create'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {editing && (
+        <div className="modal-overlay" onClick={() => setEditing(null)}>
+          <div className="modal" onClick={(e) => e.stopPropagation()}>
+            <h3 className="modal-title">Edit Group</h3>
+            <form onSubmit={handleEdit}>
+              <div className="form-group">
+                <label>Name</label>
+                <input value={editName} onChange={(e) => setEditName(e.target.value)} required autoFocus />
+              </div>
+              <div className="form-group">
+                <label>Type</label>
+                <select value={editType} onChange={(e) => setEditType(e.target.value as typeof editType)}>
+                  <option value="suite">Suite</option>
+                  <option value="room">Room</option>
+                  <option value="zone">Zone</option>
+                  <option value="boh">Back of House</option>
+                </select>
+              </div>
+              <div className="form-group">
+                <label>Description (optional)</label>
+                <textarea value={editDescription} onChange={(e) => setEditDescription(e.target.value)} rows={2} />
+              </div>
+              <div className="modal-actions">
+                <button type="button" className="btn-ghost" onClick={() => setEditing(null)}>Cancel</button>
+                <button type="submit" className="btn-primary" disabled={updateGroup.isPending}>
+                  {updateGroup.isPending ? 'Saving...' : 'Save'}
                 </button>
               </div>
             </form>

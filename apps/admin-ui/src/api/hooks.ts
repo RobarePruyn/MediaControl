@@ -31,6 +31,7 @@ import type {
   ReorderChannelsRequest,
   UpdateBrandingRequest,
   CreateVenueRequest,
+  UpdateVenueRequest,
   CreateEventRequest,
   UpdateEventRequest,
   CreateGroupAccessTokenRequest,
@@ -55,6 +56,15 @@ export function useCreateVenue() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (body: CreateVenueRequest) => apiPost<Venue>('/admin/venues', body),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['venues'] }),
+  });
+}
+
+export function useUpdateVenue() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, ...body }: UpdateVenueRequest & { id: string }) =>
+      apiPatch<Venue>('/admin/venues/' + id, body),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['venues'] }),
   });
 }

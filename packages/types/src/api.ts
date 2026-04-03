@@ -180,6 +180,13 @@ export interface CreateVenueRequest {
   timezone?: string;
 }
 
+/** Update venue request */
+export interface UpdateVenueRequest {
+  name?: string;
+  slug?: string;
+  timezone?: string;
+}
+
 // ─── Admin: Events ─────────────────────────────────────────────────────
 
 /** Create event request */

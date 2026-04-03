@@ -12,7 +12,8 @@ import {
   useSsoConfig,
   useUpsertSsoConfig,
 } from '../api/hooks.js';
-import { Plus, KeyRound } from 'lucide-react';
+import { Plus, KeyRound, Pencil } from 'lucide-react';
+import type { IdentityProvider } from '@suitecommand/types';
 import './pages.css';
 
 export function SsoSettingsPage() {
@@ -27,11 +28,23 @@ export function SsoSettingsPage() {
   const [idpSlug, setIdpSlug] = useState('');
   const [idpProtocol, setIdpProtocol] = useState<'oidc' | 'saml' | 'ldap'>('oidc');
 
+  // Edit identity provider state
+  const [editingIdp, setEditingIdp] = useState<IdentityProvider | null>(null);
+  const [editIdpName, setEditIdpName] = useState('');
+  const [editIdpActive, setEditIdpActive] = useState(false);
+
   // SSO config form
   const [providerName, setProviderName] = useState('');
   const [issuerUrl, setIssuerUrl] = useState('');
   const [clientId, setClientId] = useState('');
   const [clientSecret, setClientSecret] = useState('');
+
+  useEffect(() => {
+    if (editingIdp) {
+      setEditIdpName(editingIdp.name);
+      setEditIdpActive(editingIdp.isActive);
+    }
+  }, [editingIdp]);
 
   useEffect(() => {
     if (ssoConfig) {
@@ -133,6 +146,7 @@ export function SsoSettingsPage() {
                   <th>Name</th>
                   <th>Protocol</th>
                   <th>Status</th>
+                  <th>Actions</th>
                 </tr>
               </thead>
               <tbody>
@@ -147,6 +161,16 @@ export function SsoSettingsPage() {
                         onClick={() => toggleIdpActive(p.id, p.isActive)}
                       >
                         {p.isActive ? 'active' : 'inactive'}
+                      </button>
+                    </td>
+                    <td>
+                      <button
+                        className="btn-ghost"
+                        style={{ padding: '0.25rem' }}
+                        onClick={() => setEditingIdp(p)}
+                        title="Edit identity provider"
+                      >
+                        <Pencil size={14} />
                       </button>
                     </td>
                   </tr>
@@ -182,6 +206,47 @@ export function SsoSettingsPage() {
                 <button type="button" className="btn-ghost" onClick={() => setShowCreateIdp(false)}>Cancel</button>
                 <button type="submit" className="btn-primary" disabled={createIdp.isPending}>
                   {createIdp.isPending ? 'Creating...' : 'Create'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {editingIdp && (
+        <div className="modal-overlay" onClick={() => setEditingIdp(null)}>
+          <div className="modal" onClick={(e) => e.stopPropagation()}>
+            <h3 className="modal-title">Edit Identity Provider</h3>
+            <form
+              onSubmit={async (e: FormEvent) => {
+                e.preventDefault();
+                await updateIdp.mutateAsync({
+                  id: editingIdp!.id,
+                  name: editIdpName,
+                  isActive: editIdpActive,
+                });
+                setEditingIdp(null);
+              }}
+            >
+              <div className="form-group">
+                <label>Name</label>
+                <input value={editIdpName} onChange={(e) => setEditIdpName(e.target.value)} required autoFocus />
+              </div>
+              <div className="form-group">
+                <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                  <input
+                    type="checkbox"
+                    checked={editIdpActive}
+                    onChange={(e) => setEditIdpActive(e.target.checked)}
+                    style={{ width: 'auto' }}
+                  />
+                  Active
+                </label>
+              </div>
+              <div className="modal-actions">
+                <button type="button" className="btn-ghost" onClick={() => setEditingIdp(null)}>Cancel</button>
+                <button type="submit" className="btn-primary" disabled={updateIdp.isPending}>
+                  {updateIdp.isPending ? 'Saving...' : 'Save'}
                 </button>
               </div>
             </form>

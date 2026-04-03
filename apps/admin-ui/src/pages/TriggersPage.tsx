@@ -4,17 +4,18 @@
  * @module admin-ui/pages/TriggersPage
  */
 
-import { useState, type FormEvent } from 'react';
+import { useState, useEffect, type FormEvent } from 'react';
 import {
   useTriggers,
   useCreateTrigger,
+  useUpdateTrigger,
   useDeleteTrigger,
   useExecuteTrigger,
   useTriggerExecutions,
   useCancelExecution,
   useVenues,
 } from '../api/hooks.js';
-import { Plus, Play, Trash2, XCircle, Clock } from 'lucide-react';
+import { Plus, Pencil, Play, Trash2, XCircle, Clock } from 'lucide-react';
 import type { Trigger } from '@suitecommand/types';
 import './pages.css';
 
@@ -22,14 +23,28 @@ export function TriggersPage() {
   const { data: triggers, isLoading } = useTriggers();
   const { data: venues } = useVenues();
   const createTrigger = useCreateTrigger();
+  const updateTrigger = useUpdateTrigger();
   const deleteTrigger = useDeleteTrigger();
   const executeTrigger = useExecuteTrigger();
   const [showCreate, setShowCreate] = useState(false);
+  const [editing, setEditing] = useState<Trigger | null>(null);
   const [execTrigger, setExecTrigger] = useState<Trigger | null>(null);
 
   const [name, setName] = useState('');
   const [venueId, setVenueId] = useState('');
   const [description, setDescription] = useState('');
+
+  const [editName, setEditName] = useState('');
+  const [editDescription, setEditDescription] = useState('');
+  const [editIsActive, setEditIsActive] = useState(true);
+
+  useEffect(() => {
+    if (editing) {
+      setEditName(editing.name);
+      setEditDescription(editing.description || '');
+      setEditIsActive(editing.isActive);
+    }
+  }, [editing]);
 
   const handleCreate = async (e: FormEvent) => {
     e.preventDefault();
@@ -41,6 +56,17 @@ export function TriggersPage() {
     setShowCreate(false);
     setName('');
     setDescription('');
+  };
+
+  const handleEdit = async (e: FormEvent) => {
+    e.preventDefault();
+    await updateTrigger.mutateAsync({
+      id: editing!.id,
+      name: editName,
+      description: editDescription || undefined,
+      isActive: editIsActive,
+    });
+    setEditing(null);
   };
 
   const handleExecute = async (id: string) => {
@@ -82,6 +108,9 @@ export function TriggersPage() {
                   </td>
                   <td>
                     <div className="row-actions">
+                      <button className="btn-ghost" onClick={() => setEditing(t)} title="Edit">
+                        <Pencil size={14} />
+                      </button>
                       <button className="btn-primary" style={{ padding: '0.25rem 0.625rem' }} onClick={() => handleExecute(t.id)} title="Execute">
                         <Play size={14} />
                       </button>
@@ -127,6 +156,36 @@ export function TriggersPage() {
                 <button type="button" className="btn-ghost" onClick={() => setShowCreate(false)}>Cancel</button>
                 <button type="submit" className="btn-primary" disabled={createTrigger.isPending}>
                   {createTrigger.isPending ? 'Creating...' : 'Create'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {editing && (
+        <div className="modal-overlay" onClick={() => setEditing(null)}>
+          <div className="modal" onClick={(e) => e.stopPropagation()}>
+            <h3 className="modal-title">Edit Trigger</h3>
+            <form onSubmit={handleEdit}>
+              <div className="form-group">
+                <label>Name</label>
+                <input value={editName} onChange={(e) => setEditName(e.target.value)} required autoFocus />
+              </div>
+              <div className="form-group">
+                <label>Description (optional)</label>
+                <textarea value={editDescription} onChange={(e) => setEditDescription(e.target.value)} rows={2} />
+              </div>
+              <div className="form-group">
+                <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                  <input type="checkbox" checked={editIsActive} onChange={(e) => setEditIsActive(e.target.checked)} />
+                  Active
+                </label>
+              </div>
+              <div className="modal-actions">
+                <button type="button" className="btn-ghost" onClick={() => setEditing(null)}>Cancel</button>
+                <button type="submit" className="btn-primary" disabled={updateTrigger.isPending}>
+                  {updateTrigger.isPending ? 'Saving...' : 'Save'}
                 </button>
               </div>
             </form>
