@@ -101,7 +101,8 @@ On-Prem:                    [Bridge Agent] ──── [VisionEdge / Device API
 | **Database** | PostgreSQL 16 | Relational, cloud-portable (RDS, CloudSQL, Supabase) |
 | **ORM** | Drizzle ORM | TypeScript-native, lightweight, good migration story |
 | **Cache / Pub-Sub** | Redis 7 | Device state cache + WebSocket message bus |
-| **Auth** | JWT (access + refresh tokens) | Stateless; works identically on-prem and cloud |
+| **Auth** | JWT (access + refresh tokens) + OIDC/SAML SSO | Stateless JWTs; SSO via Passport.js strategies |
+| **SSO** | `passport-openidconnect` + `passport-saml` | Okta (OIDC) primary; SAML for Entra ID / generic IdPs |
 | **QR Codes** | `qrcode` npm package | No external dependency; generates PNG/SVG |
 | **Container** | Docker Compose v2 | Phase 1 deployment target |
 | **Reverse Proxy** | Nginx (in compose stack) | TLS termination, static asset serving, service routing |
@@ -144,7 +145,7 @@ suitecommand/
 │   │       │   ├── tenantScope.ts     # Scopes DB queries to requesting tenant
 │   │       │   └── errorHandler.ts    # Centralized error handler
 │   │       ├── routes/
-│   │       │   ├── auth.ts            # Login, refresh token, logout
+│   │       │   ├── auth.ts            # Login, refresh token, logout, SSO initiate/callback
 │   │       │   ├── admin/
 │   │       │   │   ├── tenants.ts     # Tenant CRUD (meta-admin only)
 │   │       │   │   ├── venues.ts      # Venue CRUD
@@ -153,7 +154,10 @@ suitecommand/
 │   │       │   │   ├── groups.ts      # Group CRUD (rooms/zones/suites)
 │   │       │   │   ├── channels.ts    # Channel list management
 │   │       │   │   ├── branding.ts    # Venue branding config
-│   │       │   │   └── discovery.ts   # Trigger/poll discovery from bridge agent
+│   │       │   │   ├── discovery.ts   # Trigger/poll discovery from bridge agent
+│   │       │   │   ├── tls.ts        # TLS certificate management
+│   │       │   │   ├── identityProviders.ts  # SSO/IdP configuration
+│   │       │   │   └── triggers.ts   # Trigger CRUD and execution
 │   │       │   ├── control/
 │   │       │   │   └── index.ts       # End-user control commands (power, input, vol, ch)
 │   │       │   └── qr/
@@ -512,13 +516,178 @@ The `BrandingProvider` React component fetches branding config and applies these
 
 ## 13. SECURITY REQUIREMENTS
 
-1. **Auth**: JWT access tokens expire in 15 minutes. Refresh tokens expire in 7 days and are rotated on use. Store refresh tokens in DB (hashed) so they can be individually revoked.
+1. **Auth**: JWT access tokens expire in 15 minutes. Refresh tokens expire in 7 days and are rotated on use. Store refresh tokens in DB (hashed) so they can be individually revoked. SSO users receive JWTs after completing the OIDC/SAML flow — the JWT layer is always the final auth mechanism regardless of login method.
 2. **Tenant Isolation**: Every DB query in admin routes must be scoped by `tenant_id` derived from the authenticated user's JWT claims. No cross-tenant data access is possible regardless of user role.
 3. **Credential Encryption**: Controller `connection_config` is encrypted before storage using AES-256-GCM with a server-side key from environment config. Decryption happens in the bridge agent only, never returned to clients.
 4. **Internal Bridge API**: Protected by a shared secret (`BRIDGE_INTERNAL_SECRET` env var) sent as a `X-Internal-Secret` header on every api-server → bridge-agent request.
 5. **Control UI**: Intentionally unauthenticated (guest use). Rate-limit control commands per IP per group: max 10 commands per 10 seconds.
 6. **CORS**: Admin UI and Control UI origins are explicitly allowlisted in the API server config.
 7. **Input Validation**: Use Zod for all request body validation at every route. Do not trust any client input.
+8. **TLS/HTTPS**: All external traffic is HTTPS. Nginx handles TLS termination. See Section 13A.
+
+---
+
+## 13A. TLS / HTTPS CONFIGURATION
+
+All user-facing traffic must be served over HTTPS from day one. Nginx handles TLS termination; internal service-to-service traffic (within the Docker network) remains plaintext HTTP.
+
+### Certificate Management
+
+The Admin UI provides a **TLS Certificate Management** page under Settings where an admin can:
+
+1. **Import a wildcard certificate** (preferred) — upload a PEM-encoded certificate chain + private key pair. The system validates the cert chain, extracts SANs and expiry, and writes the files to a Docker-mounted volume (`/etc/nginx/certs/`).
+2. **Generate a CSR** (fallback) — if the admin doesn't have a cert ready, generate a private key + CSR on the server. The admin downloads the CSR, submits it to their CA, and uploads the signed cert when ready.
+3. **View certificate status** — display current cert subject, SANs, issuer, expiry date, and days until expiry. Warn at 30 days, alert at 7 days.
+
+### Implementation Details
+
+- Certificates are stored on a Docker volume mounted at `nginx/certs/` (mapped to `/etc/nginx/certs/` in the container).
+- After a cert upload, the API server writes the files and sends an Nginx reload signal (`docker exec nginx nginx -s reload` or via a sidecar script).
+- The Nginx config uses `ssl_certificate` and `ssl_certificate_key` directives pointing to the volume paths.
+- For development, generate a self-signed cert during `docker-compose up` if no cert exists.
+- Store certificate metadata (subject, SANs, expiry, uploaded_by, uploaded_at) in the `tls_certificates` DB table for audit trail.
+
+### Nginx TLS Config Baseline
+
+```nginx
+ssl_protocols TLSv1.2 TLSv1.3;
+ssl_ciphers 'ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384';
+ssl_prefer_server_ciphers on;
+ssl_session_cache shared:SSL:10m;
+ssl_session_timeout 10m;
+add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
+```
+
+### API Routes — TLS Management
+
+```
+GET    /api/admin/tls                 Get current certificate status (subject, SANs, expiry)
+POST   /api/admin/tls/upload          Upload cert chain + private key (multipart PEM files)
+POST   /api/admin/tls/csr             Generate CSR { commonName, sans[], organization, country }
+GET    /api/admin/tls/csr/download    Download the most recent CSR
+POST   /api/admin/tls/csr/complete    Upload signed cert to complete pending CSR
+```
+
+---
+
+## 13B. SSO / IDENTITY PROVIDER INTEGRATION
+
+SuiteCommand supports federated authentication via SSO alongside local username/password auth. The auth system is strategy-based: local auth and each SSO provider are independent Passport.js strategies. JWTs are always the session mechanism — SSO flows terminate by issuing a JWT pair, identical to local login.
+
+### Supported Identity Providers (Phase 1)
+
+| Provider | Protocol | Library | Priority |
+|---|---|---|---|
+| **Okta** | OIDC (OpenID Connect) | `passport-openidconnect` | Primary — implement first |
+| **Entra ID (Azure AD)** | SAML 2.0 or OIDC | `passport-saml` or `passport-openidconnect` | Secondary |
+| **Generic SAML** | SAML 2.0 | `passport-saml` | Fallback for any SAML IdP |
+| **LDAP Import** | LDAP/LDAPS | `ldapjs` | User provisioning only (not runtime auth) |
+
+### Architecture
+
+- Each tenant can configure one or more identity providers (IdPs) in the `identity_providers` table.
+- The IdP config stores protocol, client ID/secret (encrypted like controller credentials), metadata URL, and attribute mappings.
+- SSO login flow: Admin UI redirects to `/api/auth/sso/:providerSlug` → Passport strategy redirects to IdP → callback at `/api/auth/sso/:providerSlug/callback` → JWT issued → redirect to Admin UI with token.
+- User auto-provisioning: On first SSO login, if the user's email matches the tenant domain, create a user record with `auth_provider` set to the IdP slug and role defaulting to `operator`. Admins can pre-assign roles by email.
+- LDAP sync is a batch import operation (not a login flow): an admin triggers a sync that reads users from LDAP, matches by email, and creates/updates user records.
+
+### Database Additions
+
+```typescript
+identity_providers   // id, tenant_id, name, slug, protocol ('oidc' | 'saml' | 'ldap'),
+                     //   config (jsonb, encrypted — clientId, clientSecret, metadata_url, etc.),
+                     //   attribute_mapping (jsonb — maps IdP claims to SuiteCommand user fields),
+                     //   is_active, created_at
+
+// Extend users table:
+//   + auth_provider: varchar — null for local, or identity_provider slug
+//   + external_id: varchar — IdP subject/nameID for SSO users
+```
+
+### API Routes — SSO
+
+```
+GET    /api/admin/identity-providers           List configured IdPs for tenant
+POST   /api/admin/identity-providers           Create IdP config
+GET    /api/admin/identity-providers/:id       Get IdP config (secrets redacted)
+PATCH  /api/admin/identity-providers/:id       Update IdP config
+DELETE /api/admin/identity-providers/:id       Remove IdP
+POST   /api/admin/identity-providers/:id/test  Test IdP connectivity / metadata fetch
+POST   /api/admin/identity-providers/:id/sync  Trigger LDAP user sync (LDAP providers only)
+
+GET    /api/auth/sso/:providerSlug             Initiate SSO login (redirect to IdP)
+GET    /api/auth/sso/:providerSlug/callback    SSO callback (issues JWT, redirects to UI)
+POST   /api/auth/sso/:providerSlug/metadata    SAML metadata endpoint (for IdP configuration)
+```
+
+### Cloud Auth Consideration (Phase 2)
+
+The strategy-based auth architecture is compatible with adding AWS Cognito or Auth0 as an identity broker in Phase 2. In that scenario, the on-prem SSO strategies would be replaced by a single OIDC strategy pointed at the cloud identity broker, which in turn federates to customer IdPs. The JWT layer, tenant scoping, and user model remain unchanged. **Do not build Cognito integration in Phase 1** — just ensure the auth middleware accepts JWTs from any configured issuer.
+
+---
+
+## 13C. TRIGGER DASHBOARD
+
+The Trigger Dashboard is an admin-facing feature that allows operators to define, manage, and execute automation scripts ("triggers") against groups of endpoints. This provides a scriptable layer on top of individual device control — for example, "game day mode" that sets all suite TVs to the house channel and raises volume, or "post-event" that powers everything down.
+
+### Concepts
+
+- **Trigger**: A named, reusable automation script consisting of an ordered list of actions. Scoped to a venue.
+- **Trigger Action**: A single step within a trigger — a control command, a delay, or a conditional check.
+- **Trigger State**: Triggers have states: `idle`, `running`, `completed`, `failed`, `cancelled`. Running triggers can be stopped.
+- **Trigger Target**: A trigger targets one or more groups (or all endpoints in a venue). Target resolution happens at execution time, so group membership changes are reflected.
+
+### Database Tables
+
+```typescript
+triggers             // id, venue_id, name, description, is_active, created_by (user_id),
+                     //   created_at, updated_at, deleted_at
+
+trigger_actions      // id, trigger_id, action_order, action_type ('command' | 'delay' | 'conditional'),
+                     //   config (jsonb — command details, delay_ms, condition expression),
+                     //   created_at
+
+trigger_targets      // id, trigger_id, target_type ('group' | 'venue'), target_id (group or venue UUID)
+
+trigger_executions   // id, trigger_id, started_by (user_id), state ('running' | 'completed' | 'failed' | 'cancelled'),
+                     //   started_at, completed_at, error_message, execution_log (jsonb — per-action results)
+```
+
+### Action Types
+
+- **command**: A `ControlCommand` sent to all endpoints in the target scope. Config: `{ commandType, payload }`.
+- **delay**: Pause execution for N milliseconds. Config: `{ delayMs: number }`.
+- **conditional**: Check endpoint state before proceeding. Config: `{ check: 'isPoweredOn', expect: true, onFail: 'skip' | 'abort' }`.
+
+### Execution Model
+
+- Trigger execution is asynchronous. The API returns immediately with an execution ID; the client polls or subscribes via WebSocket for progress.
+- Actions execute sequentially. If an action fails, the trigger either continues (best-effort) or aborts, depending on the trigger's error policy.
+- A running trigger can be cancelled by the user, which stops execution after the current action completes.
+- Execution logs record the result of each action for post-run review.
+
+### API Routes — Triggers
+
+```
+GET    /api/admin/triggers                     List triggers for venue
+POST   /api/admin/triggers                     Create trigger
+GET    /api/admin/triggers/:id                 Get trigger with actions and targets
+PATCH  /api/admin/triggers/:id                 Update trigger metadata
+DELETE /api/admin/triggers/:id                 Soft delete
+POST   /api/admin/triggers/:id/actions         Add/replace action list
+PUT    /api/admin/triggers/:id/targets         Set target groups
+POST   /api/admin/triggers/:id/execute         Start trigger execution → { executionId }
+POST   /api/admin/triggers/:id/cancel          Cancel running execution
+GET    /api/admin/triggers/:id/executions      List past executions
+GET    /api/admin/trigger-executions/:execId   Get execution detail + log
+WS     /ws/trigger-executions/:execId          Subscribe to live execution progress
+```
+
+### Future Integration Points (Design Only — Not Phase 1)
+
+- **VITEC Events / MoE Activities**: Triggers could be fired by external event systems via webhook. Add a `trigger_webhooks` table mapping an inbound webhook token to a trigger ID.
+- **TriplePlay Event Triggers**: Same pattern — TriplePlay sends an HTTP POST to a webhook URL, SuiteCommand maps it to a trigger and executes.
+- These integrations are adapter-pattern work: the trigger execution engine is platform-agnostic, only the invocation source changes.
 
 ---
 
@@ -540,6 +709,9 @@ BRIDGE_INTERNAL_SECRET=<random>
 HOST=https://suitecommand.local  # Used for QR code URL generation
 QR_STORAGE_PATH=/app/qr-storage
 CORS_ALLOWED_ORIGINS=http://localhost:3001,http://localhost:3002
+TLS_CERT_PATH=/etc/nginx/certs/server.crt
+TLS_KEY_PATH=/etc/nginx/certs/server.key
+TLS_CERT_STORAGE_PATH=/app/tls-storage
 
 # bridge-agent
 BRIDGE_INTERNAL_SECRET=<same as above>
@@ -574,17 +746,18 @@ Mount `qr-storage` as a shared named volume between `api-server` and `nginx` so 
 Implement in this sequence to avoid circular dependencies and allow incremental testing:
 
 1. **`packages/types`** — All shared interfaces, enums, and DTO types. No dependencies.
-2. **Database schema + migrations** — Drizzle schema in api-server. Run `drizzle-kit generate` and validate.
+2. **Database schema + migrations** — Drizzle schema in api-server (incl. identity_providers, triggers, tls_certificates tables). Run `drizzle-kit generate` and validate.
 3. **`services/bridge-agent` skeleton** — Adapter interface, registry, VisionEdge stub (returns mock data). Internal API routes.
-4. **`services/api-server` foundation** — Express setup, middleware, auth routes, DB client, bridge client.
-5. **Admin API routes** — Controllers, endpoints, groups, channels, branding, discovery (in that order).
+4. **`services/api-server` foundation** — Express setup, middleware, auth routes (local + SSO/Passport.js), DB client, bridge client.
+5. **Admin API routes** — Controllers, endpoints, groups, channels, branding, discovery, TLS management, identity providers, triggers (in that order).
 6. **QR code service** — Generation and file hosting.
 7. **Control API routes + WebSocket** — Public control endpoint and real-time state.
-8. **`apps/admin-ui`** — Full admin interface. Build pages in same order as API routes.
-9. **`apps/control-ui`** — End-user control interface with branding system.
-10. **VisionEdge adapter (real implementation)** — Replace stubs with actual VisionEdge API calls.
-11. **Docker Compose + Nginx** — Wire all services together. Test full stack.
-12. **Dev seed script** — Create default tenant, venue, admin user for local development.
+8. **Trigger execution engine** — Async trigger runner, execution logging, WebSocket progress.
+9. **`apps/admin-ui`** — Full admin interface. Build pages in same order as API routes (incl. TLS settings, SSO config, trigger dashboard).
+10. **`apps/control-ui`** — End-user control interface with branding system.
+11. **VisionEdge adapter (real implementation)** — Replace stubs with actual VisionEdge API calls.
+12. **Docker Compose + Nginx (HTTPS)** — Wire all services together with TLS. Self-signed cert for dev. Test full stack.
+13. **Dev seed script** — Create default tenant, venue, admin user, sample trigger for local development.
 
 ---
 
@@ -597,6 +770,9 @@ Implement in this sequence to avoid circular dependencies and allow incremental 
 - Native mobile app embedding docs — web iframing only
 - Payment / billing — not applicable yet
 - Email / notification system
+- AWS Cognito / Auth0 cloud identity broker — design is compatible, but do not integrate in Phase 1
+- VITEC Events / TriplePlay webhook triggers — trigger engine supports it, but inbound webhook mapping is Phase 2
+- LDAP runtime authentication — LDAP is import-only in Phase 1; runtime auth is local or SSO (OIDC/SAML)
 
 ---
 

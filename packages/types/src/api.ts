@@ -4,7 +4,7 @@
  * @module @suitecommand/types/api
  */
 
-import type { GroupType, PlanTier, UserRole } from './tenant.js';
+import type { GroupType, IdpProtocol, PlanTier, TriggerActionType, TriggerTargetType, UserRole } from './tenant.js';
 
 // ─── Common Response Wrappers ──────────────────────────────────────────
 
@@ -188,4 +188,84 @@ export interface BridgeCommandRequest {
   payload: Record<string, unknown>;
   connectionConfig: Record<string, unknown>;
   platformSlug: string;
+}
+
+// ─── Admin: Identity Providers ─────────────────────────────────────────
+
+/** Create identity provider request */
+export interface CreateIdentityProviderRequest {
+  name: string;
+  slug: string;
+  protocol: IdpProtocol;
+  config: Record<string, unknown>;
+  attributeMapping?: Record<string, string>;
+}
+
+/** Update identity provider request */
+export interface UpdateIdentityProviderRequest {
+  name?: string;
+  config?: Record<string, unknown>;
+  attributeMapping?: Record<string, string>;
+  isActive?: boolean;
+}
+
+// ─── Admin: TLS Certificates ──────────────────────────────────────────
+
+/** Generate CSR request */
+export interface GenerateCsrRequest {
+  commonName: string;
+  sans: string[];
+  organization?: string;
+  country?: string;
+}
+
+/** TLS certificate status response */
+export interface TlsCertificateStatus {
+  subject: string;
+  sans: string[];
+  issuer: string;
+  expiresAt: string;
+  daysUntilExpiry: number;
+  isActive: boolean;
+  uploadedAt: string;
+}
+
+// ─── Admin: Triggers ──────────────────────────────────────────────────
+
+/** Create trigger request */
+export interface CreateTriggerRequest {
+  name: string;
+  venueId: string;
+  description?: string;
+}
+
+/** Update trigger request */
+export interface UpdateTriggerRequest {
+  name?: string;
+  description?: string;
+  isActive?: boolean;
+}
+
+/** Set trigger actions request */
+export interface SetTriggerActionsRequest {
+  actions: Array<{
+    actionOrder: number;
+    actionType: TriggerActionType;
+    config: Record<string, unknown>;
+  }>;
+}
+
+/** Set trigger targets request */
+export interface SetTriggerTargetsRequest {
+  targets: Array<{
+    targetType: TriggerTargetType;
+    targetId: string;
+  }>;
+}
+
+/** Trigger execution response */
+export interface TriggerExecutionResponse {
+  executionId: string;
+  state: string;
+  startedAt: string;
 }

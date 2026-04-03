@@ -128,6 +128,10 @@ export interface User {
   tenantId: string;
   email: string;
   role: UserRole;
+  /** Null for local auth, or the identity provider slug for SSO users */
+  authProvider: string | null;
+  /** External subject/nameID from the IdP for SSO users */
+  externalId: string | null;
   isActive: boolean;
   createdAt: string;
   lastLoginAt: string | null;
@@ -143,4 +147,108 @@ export interface AuditLogEntry {
   entityId: string;
   payload: unknown;
   createdAt: string;
+}
+
+// ─── Identity Providers ────────────────────────────────────────────────
+
+/** Supported SSO/identity provider protocols */
+export type IdpProtocol = 'oidc' | 'saml' | 'ldap';
+
+/** Identity provider configuration for a tenant */
+export interface IdentityProvider {
+  id: string;
+  tenantId: string;
+  name: string;
+  slug: string;
+  protocol: IdpProtocol;
+  /** Config is encrypted at rest; secrets redacted when returned to clients */
+  config?: unknown;
+  attributeMapping: Record<string, string> | null;
+  isActive: boolean;
+  createdAt: string;
+}
+
+// ─── TLS Certificates ─────────────────────────────────────────────────
+
+/** TLS certificate metadata stored for audit */
+export interface TlsCertificate {
+  id: string;
+  tenantId: string;
+  subject: string;
+  sans: string[];
+  issuer: string;
+  expiresAt: string;
+  uploadedBy: string | null;
+  uploadedAt: string;
+  isActive: boolean;
+}
+
+// ─── Triggers ──────────────────────────────────────────────────────────
+
+/** Trigger action types */
+export type TriggerActionType = 'command' | 'delay' | 'conditional';
+
+/** Trigger execution states */
+export type TriggerExecutionState = 'running' | 'completed' | 'failed' | 'cancelled';
+
+/** Trigger target scope */
+export type TriggerTargetType = 'group' | 'venue';
+
+/** A named automation trigger scoped to a venue */
+export interface Trigger {
+  id: string;
+  venueId: string;
+  name: string;
+  description: string | null;
+  isActive: boolean;
+  createdBy: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/** A single step within a trigger */
+export interface TriggerAction {
+  id: string;
+  triggerId: string;
+  actionOrder: number;
+  actionType: TriggerActionType;
+  config: TriggerCommandConfig | TriggerDelayConfig | TriggerConditionalConfig;
+}
+
+/** Config for a 'command' action */
+export interface TriggerCommandConfig {
+  commandType: string;
+  payload: Record<string, unknown>;
+}
+
+/** Config for a 'delay' action */
+export interface TriggerDelayConfig {
+  delayMs: number;
+}
+
+/** Config for a 'conditional' action */
+export interface TriggerConditionalConfig {
+  check: string;
+  expect: unknown;
+  onFail: 'skip' | 'abort';
+}
+
+/** Target scope for a trigger */
+export interface TriggerTarget {
+  id: string;
+  triggerId: string;
+  targetType: TriggerTargetType;
+  targetId: string;
+}
+
+/** Record of a trigger execution */
+export interface TriggerExecution {
+  id: string;
+  triggerId: string;
+  startedBy: string | null;
+  state: TriggerExecutionState;
+  startedAt: string;
+  completedAt: string | null;
+  errorMessage: string | null;
+  executionLog: unknown;
 }

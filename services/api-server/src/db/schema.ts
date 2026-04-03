@@ -23,6 +23,9 @@ import {
 export const planTierEnum = pgEnum('plan_tier', ['basic', 'professional', 'enterprise']);
 export const userRoleEnum = pgEnum('user_role', ['meta_admin', 'site_admin', 'operator']);
 export const groupTypeEnum = pgEnum('group_type', ['suite', 'room', 'zone', 'boh']);
+export const idpProtocolEnum = pgEnum('idp_protocol', ['oidc', 'saml', 'ldap']);
+export const triggerActionTypeEnum = pgEnum('trigger_action_type', ['command', 'delay', 'conditional']);
+export const triggerExecutionStateEnum = pgEnum('trigger_execution_state', ['running', 'completed', 'failed', 'cancelled']);
 
 // ─── Tenants ───────────────────────────────────────────────────────────
 
@@ -181,8 +184,13 @@ export const users = pgTable('users', {
   id: uuid('id').primaryKey().defaultRandom(),
   tenantId: uuid('tenant_id').notNull().references(() => tenants.id),
   email: varchar('email', { length: 255 }).notNull().unique(),
-  hashedPassword: text('hashed_password').notNull(),
+  /** Nullable for SSO-only users who never set a local password */
+  hashedPassword: text('hashed_password'),
   role: userRoleEnum('role').notNull().default('operator'),
+  /** Null for local auth, or the identity_provider slug for SSO users */
+  authProvider: varchar('auth_provider', { length: 100 }),
+  /** External subject/nameID from the IdP for SSO users */
+  externalId: varchar('external_id', { length: 500 }),
   isActive: boolean('is_active').notNull().default(true),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   lastLoginAt: timestamp('last_login_at', { withTimezone: true }),
@@ -220,11 +228,102 @@ export const auditLog = pgTable('audit_log', {
   index('audit_log_entity_idx').on(table.entityType, table.entityId),
 ]);
 
+// ─── Identity Providers ────────────────────────────────────────────────
+
+export const identityProviders = pgTable('identity_providers', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  tenantId: uuid('tenant_id').notNull().references(() => tenants.id),
+  name: varchar('name', { length: 255 }).notNull(),
+  slug: varchar('slug', { length: 100 }).notNull(),
+  protocol: idpProtocolEnum('protocol').notNull(),
+  /** Encrypted JSONB — clientId, clientSecret, metadata URL, LDAP bind DN, etc. */
+  config: text('config').notNull(),
+  /** Maps IdP claims/attributes to SuiteCommand user fields */
+  attributeMapping: jsonb('attribute_mapping'),
+  isActive: boolean('is_active').notNull().default(true),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  deletedAt: timestamp('deleted_at', { withTimezone: true }),
+}, (table) => [
+  index('identity_providers_tenant_id_idx').on(table.tenantId),
+]);
+
+// ─── TLS Certificates ─────────────────────────────────────────────────
+
+export const tlsCertificates = pgTable('tls_certificates', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  tenantId: uuid('tenant_id').notNull().references(() => tenants.id),
+  subject: varchar('subject', { length: 500 }).notNull(),
+  sans: jsonb('sans').notNull(),
+  issuer: varchar('issuer', { length: 500 }).notNull(),
+  expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+  uploadedBy: uuid('uploaded_by').references(() => users.id),
+  uploadedAt: timestamp('uploaded_at', { withTimezone: true }).notNull().defaultNow(),
+  isActive: boolean('is_active').notNull().default(true),
+  /** Pending CSR data if cert was generated via CSR flow */
+  pendingCsr: text('pending_csr'),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+}, (table) => [
+  index('tls_certificates_tenant_id_idx').on(table.tenantId),
+]);
+
+// ─── Triggers ──────────────────────────────────────────────────────────
+
+export const triggers = pgTable('triggers', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  venueId: uuid('venue_id').notNull().references(() => venues.id),
+  name: varchar('name', { length: 255 }).notNull(),
+  description: text('description'),
+  isActive: boolean('is_active').notNull().default(true),
+  createdBy: uuid('created_by').references(() => users.id),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  deletedAt: timestamp('deleted_at', { withTimezone: true }),
+}, (table) => [
+  index('triggers_venue_id_idx').on(table.venueId),
+]);
+
+export const triggerActions = pgTable('trigger_actions', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  triggerId: uuid('trigger_id').notNull().references(() => triggers.id),
+  actionOrder: integer('action_order').notNull(),
+  actionType: triggerActionTypeEnum('action_type').notNull(),
+  /** Config varies by action type: command payload, delay_ms, conditional expression */
+  config: jsonb('config').notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+}, (table) => [
+  index('trigger_actions_trigger_id_idx').on(table.triggerId),
+]);
+
+export const triggerTargets = pgTable('trigger_targets', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  triggerId: uuid('trigger_id').notNull().references(() => triggers.id),
+  targetType: varchar('target_type', { length: 20 }).notNull(), // 'group' | 'venue'
+  targetId: uuid('target_id').notNull(),
+}, (table) => [
+  index('trigger_targets_trigger_id_idx').on(table.triggerId),
+]);
+
+export const triggerExecutions = pgTable('trigger_executions', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  triggerId: uuid('trigger_id').notNull().references(() => triggers.id),
+  startedBy: uuid('started_by').references(() => users.id),
+  state: triggerExecutionStateEnum('state').notNull().default('running'),
+  startedAt: timestamp('started_at', { withTimezone: true }).notNull().defaultNow(),
+  completedAt: timestamp('completed_at', { withTimezone: true }),
+  errorMessage: text('error_message'),
+  /** Per-action results log */
+  executionLog: jsonb('execution_log'),
+}, (table) => [
+  index('trigger_executions_trigger_id_idx').on(table.triggerId),
+]);
+
 // ─── Relations ─────────────────────────────────────────────────────────
 
 export const tenantsRelations = relations(tenants, ({ many }) => ({
   venues: many(venues),
   users: many(users),
+  identityProviders: many(identityProviders),
+  tlsCertificates: many(tlsCertificates),
 }));
 
 export const venuesRelations = relations(venues, ({ one, many }) => ({
@@ -233,6 +332,7 @@ export const venuesRelations = relations(venues, ({ one, many }) => ({
   endpoints: many(endpoints),
   groups: many(groups),
   channels: many(channels),
+  triggers: many(triggers),
   brandingConfig: one(brandingConfigs, { fields: [venues.id], references: [brandingConfigs.venueId] }),
 }));
 
@@ -283,4 +383,29 @@ export const usersRelations = relations(users, ({ one, many }) => ({
 
 export const refreshTokensRelations = relations(refreshTokens, ({ one }) => ({
   user: one(users, { fields: [refreshTokens.userId], references: [users.id] }),
+}));
+
+export const identityProvidersRelations = relations(identityProviders, ({ one }) => ({
+  tenant: one(tenants, { fields: [identityProviders.tenantId], references: [tenants.id] }),
+}));
+
+export const triggersRelations = relations(triggers, ({ one, many }) => ({
+  venue: one(venues, { fields: [triggers.venueId], references: [venues.id] }),
+  createdByUser: one(users, { fields: [triggers.createdBy], references: [users.id] }),
+  actions: many(triggerActions),
+  targets: many(triggerTargets),
+  executions: many(triggerExecutions),
+}));
+
+export const triggerActionsRelations = relations(triggerActions, ({ one }) => ({
+  trigger: one(triggers, { fields: [triggerActions.triggerId], references: [triggers.id] }),
+}));
+
+export const triggerTargetsRelations = relations(triggerTargets, ({ one }) => ({
+  trigger: one(triggers, { fields: [triggerTargets.triggerId], references: [triggers.id] }),
+}));
+
+export const triggerExecutionsRelations = relations(triggerExecutions, ({ one }) => ({
+  trigger: one(triggers, { fields: [triggerExecutions.triggerId], references: [triggers.id] }),
+  startedByUser: one(users, { fields: [triggerExecutions.startedBy], references: [users.id] }),
 }));
