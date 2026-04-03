@@ -51,11 +51,14 @@ server {
     root /usr/share/nginx/html;
     index index.html;
 
+    # HTML — never cache (ensures new deploys are picked up immediately)
     location / {
         try_files $uri $uri/ /index.html;
+        add_header Cache-Control "no-cache, no-store, must-revalidate";
+        add_header Pragma "no-cache";
     }
 
-    # Cache static assets aggressively
+    # Hashed static assets — cache aggressively (Vite content-hashes filenames)
     location ~* \.(js|css|png|jpg|jpeg|gif|ico|svg|woff|woff2|ttf|eot)$ {
         expires 1y;
         add_header Cache-Control "public, immutable";
