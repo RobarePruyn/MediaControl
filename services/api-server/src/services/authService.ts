@@ -13,6 +13,7 @@ import type { Database } from '../db/client.js';
 import { users, refreshTokens } from '../db/schema.js';
 import { AppError, ErrorCode } from '../errors.js';
 import type { JwtPayload } from '../middleware/auth.js';
+import { fetchUserVenueIds } from '../middleware/permissions.js';
 
 /** Bcrypt cost factor — minimum 12 per auth addendum */
 const BCRYPT_COST = 12;
@@ -88,6 +89,9 @@ export class AuthService {
       expiresAt,
     });
 
+    // Fetch venue assignments for the response
+    const venueIds = await fetchUserVenueIds(this.db, user.id);
+
     return {
       accessToken,
       refreshToken,
@@ -96,6 +100,7 @@ export class AuthService {
         email: user.email,
         role: user.role,
         tenantId: user.tenantId,
+        venueIds,
       },
     };
   }
@@ -125,7 +130,7 @@ export class AuthService {
           email,
           authProvider,
           externalId,
-          role: 'operator',
+          role: 'venue_operator',
         })
         .returning();
       user = newUser;
@@ -150,6 +155,8 @@ export class AuthService {
       expiresAt,
     });
 
+    const venueIds = await fetchUserVenueIds(this.db, user.id);
+
     return {
       accessToken,
       refreshToken,
@@ -158,6 +165,7 @@ export class AuthService {
         email: user.email,
         role: user.role,
         tenantId: user.tenantId,
+        venueIds,
       },
     };
   }

@@ -10,14 +10,13 @@ import { eq, and, isNull, inArray } from 'drizzle-orm';
 import { z } from 'zod';
 
 import type { Database } from '../../db/client.js';
-import { channels, venues, controllers } from '../../db/schema.js';
-import type { TenantScopedRequest } from '../../middleware/tenantScope.js';
+import { channels, controllers } from '../../db/schema.js';
+import type { VenueScopedRequest } from '../../middleware/permissions.js';
 import type { BridgeClient } from '../../services/bridgeClient.js';
 import { decryptJson } from '../../utils/encryption.js';
 import { AppError, ErrorCode } from '../../errors.js';
 
 const createSchema = z.object({
-  venueId: z.string().uuid(),
   platformChannelId: z.string().min(1),
   displayName: z.string().min(1).max(255),
   channelNumber: z.string().min(1).max(20),
@@ -50,64 +49,54 @@ export function createChannelRoutes(
   bridgeClient: BridgeClient,
   encryptionKey: string,
 ): RouterType {
-  const router: RouterType = Router();
+  const router: RouterType = Router({ mergeParams: true });
 
-  /** GET /api/admin/channels — List channels for venue */
+  /** GET / — List channels for venue */
   router.get('/', async (req: Request, res: Response) => {
-    const { tenantId } = req as TenantScopedRequest;
+    const { venueId } = req as VenueScopedRequest;
 
     const result = await db
-      .select({ channel: channels })
+      .select()
       .from(channels)
-      .innerJoin(venues, eq(channels.venueId, venues.id))
-      .where(eq(venues.tenantId, tenantId))
+      .where(eq(channels.venueId, venueId))
       .orderBy(channels.displayOrder);
 
-    res.json({ success: true, data: result.map((r) => r.channel) });
+    res.json({ success: true, data: result });
   });
 
-  /** POST /api/admin/channels — Create channel manually */
+  /** POST / — Create channel manually */
   router.post('/', async (req: Request, res: Response) => {
-    const { tenantId } = req as TenantScopedRequest;
+    const { venueId } = req as VenueScopedRequest;
     const body = createSchema.parse(req.body);
 
-    const [venue] = await db
-      .select()
-      .from(venues)
-      .where(and(eq(venues.id, body.venueId), eq(venues.tenantId, tenantId)));
-
-    if (!venue) {
-      throw new AppError(ErrorCode.NOT_FOUND, 'Venue not found', 404);
-    }
-
-    const [created] = await db.insert(channels).values(body).returning();
+    const [created] = await db.insert(channels).values({ ...body, venueId }).returning();
     res.status(201).json({ success: true, data: created });
   });
 
-  /** POST /api/admin/channels/sync — Sync channels from controller */
+  /** POST /sync — Sync channels from controller */
   router.post('/sync', async (req: Request, res: Response) => {
-    const { tenantId } = req as TenantScopedRequest;
+    const { venueId } = req as VenueScopedRequest;
     const { controllerId } = z.object({ controllerId: z.string().uuid() }).parse(req.body);
 
+    // Validate controller belongs to this venue
     const [controller] = await db
       .select()
       .from(controllers)
-      .innerJoin(venues, eq(controllers.venueId, venues.id))
-      .where(and(eq(controllers.id, controllerId), eq(venues.tenantId, tenantId)));
+      .where(and(eq(controllers.id, controllerId), eq(controllers.venueId, venueId)));
 
     if (!controller) {
       throw new AppError(ErrorCode.NOT_FOUND, 'Controller not found', 404);
     }
 
     const config = decryptJson<Record<string, unknown>>(
-      controller.controllers.connectionConfig,
+      controller.connectionConfig,
       encryptionKey,
     );
 
     const discovered = await bridgeClient.discoverChannels(
       controllerId,
-      controller.controllers.platformSlug,
-      { platform: controller.controllers.platformSlug, ...config },
+      controller.platformSlug,
+      { platform: controller.platformSlug, ...config },
     );
 
     // Upsert discovered channels
@@ -117,7 +106,7 @@ export function createChannelRoutes(
       const [upserted] = await db
         .insert(channels)
         .values({
-          venueId: controller.controllers.venueId,
+          venueId,
           platformChannelId: ch.channelNumber,
           displayName: ch.displayName,
           channelNumber: ch.channelNumber,
@@ -132,12 +121,17 @@ export function createChannelRoutes(
     res.json({ success: true, data: { synced: discovered.length, created: created.length } });
   });
 
-  /** PATCH /api/admin/channels/:id — Update channel */
+  /** PATCH /:id — Update channel */
   router.patch('/:id', async (req: Request, res: Response) => {
+    const { venueId } = req as VenueScopedRequest;
     const id = String(req.params.id);
     const body = updateSchema.parse(req.body);
 
-    const [updated] = await db.update(channels).set(body).where(eq(channels.id, id)).returning();
+    const [updated] = await db
+      .update(channels)
+      .set(body)
+      .where(and(eq(channels.id, id), eq(channels.venueId, venueId)))
+      .returning();
 
     if (!updated) {
       throw new AppError(ErrorCode.NOT_FOUND, 'Channel not found', 404);
@@ -146,15 +140,16 @@ export function createChannelRoutes(
     res.json({ success: true, data: updated });
   });
 
-  /** PATCH /api/admin/channels/reorder — Bulk reorder */
+  /** PATCH /reorder — Bulk reorder */
   router.patch('/reorder', async (req: Request, res: Response) => {
+    const { venueId } = req as VenueScopedRequest;
     const body = reorderSchema.parse(req.body);
 
     for (const item of body.channelOrders) {
       await db
         .update(channels)
         .set({ displayOrder: item.displayOrder })
-        .where(eq(channels.id, item.id));
+        .where(and(eq(channels.id, item.id), eq(channels.venueId, venueId)));
     }
 
     res.json({ success: true, data: { reordered: body.channelOrders.length } });

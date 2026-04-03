@@ -9,8 +9,8 @@ import { eq, and, isNull } from 'drizzle-orm';
 import { z } from 'zod';
 
 import type { Database } from '../../db/client.js';
-import { groups, venues, groupEndpoints, endpoints, groupAccessTokens } from '../../db/schema.js';
-import type { TenantScopedRequest } from '../../middleware/tenantScope.js';
+import { groups, venues, groupEndpoints, endpoints, groupAccessTokens, tenants } from '../../db/schema.js';
+import type { VenueScopedRequest } from '../../middleware/permissions.js';
 import type { QrService } from '../../services/qrService.js';
 import { generateAccessToken } from '../../utils/tokenGenerator.js';
 import { AppError, ErrorCode } from '../../errors.js';
@@ -18,7 +18,6 @@ import { AppError, ErrorCode } from '../../errors.js';
 const createSchema = z.object({
   name: z.string().min(1).max(255),
   type: z.enum(['suite', 'room', 'zone', 'boh']),
-  venueId: z.string().uuid(),
   description: z.string().optional(),
 });
 
@@ -45,39 +44,29 @@ const createTokenSchema = z.object({
  * @param qrService - QR code generation service
  */
 export function createGroupRoutes(db: Database, qrService: QrService): RouterType {
-  const router: RouterType = Router();
+  const router: RouterType = Router({ mergeParams: true });
 
-  /** GET /api/admin/groups — List groups */
+  /** GET / — List groups for venue */
   router.get('/', async (req: Request, res: Response) => {
-    const { tenantId } = req as TenantScopedRequest;
+    const { venueId } = req as VenueScopedRequest;
 
     const result = await db
       .select()
       .from(groups)
-      .innerJoin(venues, eq(groups.venueId, venues.id))
-      .where(and(eq(venues.tenantId, tenantId), isNull(groups.deletedAt)));
+      .where(and(eq(groups.venueId, venueId), isNull(groups.deletedAt)));
 
-    res.json({ success: true, data: result.map((r) => r.groups) });
+    res.json({ success: true, data: result });
   });
 
-  /** POST /api/admin/groups — Create group */
+  /** POST / — Create group */
   router.post('/', async (req: Request, res: Response) => {
-    const { tenantId } = req as TenantScopedRequest;
+    const { venueId } = req as VenueScopedRequest;
     const body = createSchema.parse(req.body);
-
-    const [venue] = await db
-      .select()
-      .from(venues)
-      .where(and(eq(venues.id, body.venueId), eq(venues.tenantId, tenantId)));
-
-    if (!venue) {
-      throw new AppError(ErrorCode.NOT_FOUND, 'Venue not found', 404);
-    }
 
     const [created] = await db
       .insert(groups)
       .values({
-        venueId: body.venueId,
+        venueId,
         name: body.name,
         type: body.type,
         description: body.description,
@@ -87,18 +76,17 @@ export function createGroupRoutes(db: Database, qrService: QrService): RouterTyp
     res.status(201).json({ success: true, data: created });
   });
 
-  /** GET /api/admin/groups/:id — Get group with endpoints */
+  /** GET /:id — Get group with endpoints */
   router.get('/:id', async (req: Request, res: Response) => {
-    const { tenantId } = req as TenantScopedRequest;
+    const { venueId } = req as VenueScopedRequest;
     const id = String(req.params.id);
 
-    const [result] = await db
+    const [group] = await db
       .select()
       .from(groups)
-      .innerJoin(venues, eq(groups.venueId, venues.id))
-      .where(and(eq(groups.id, id), eq(venues.tenantId, tenantId), isNull(groups.deletedAt)));
+      .where(and(eq(groups.id, id), eq(groups.venueId, venueId), isNull(groups.deletedAt)));
 
-    if (!result) {
+    if (!group) {
       throw new AppError(ErrorCode.NOT_FOUND, 'Group not found', 404);
     }
 
@@ -119,24 +107,23 @@ export function createGroupRoutes(db: Database, qrService: QrService): RouterTyp
     res.json({
       success: true,
       data: {
-        ...result.groups,
+        ...group,
         endpoints: groupEps.map((ge) => ({ ...ge.endpoint, displayOrder: ge.displayOrder })),
         activeToken: activeToken ?? null,
       },
     });
   });
 
-  /** PATCH /api/admin/groups/:id — Update group */
+  /** PATCH /:id — Update group */
   router.patch('/:id', async (req: Request, res: Response) => {
-    const { tenantId } = req as TenantScopedRequest;
+    const { venueId } = req as VenueScopedRequest;
     const id = String(req.params.id);
     const body = updateSchema.parse(req.body);
 
     const [existing] = await db
       .select()
       .from(groups)
-      .innerJoin(venues, eq(groups.venueId, venues.id))
-      .where(and(eq(groups.id, id), eq(venues.tenantId, tenantId), isNull(groups.deletedAt)));
+      .where(and(eq(groups.id, id), eq(groups.venueId, venueId), isNull(groups.deletedAt)));
 
     if (!existing) {
       throw new AppError(ErrorCode.NOT_FOUND, 'Group not found', 404);
@@ -146,16 +133,15 @@ export function createGroupRoutes(db: Database, qrService: QrService): RouterTyp
     res.json({ success: true, data: updated });
   });
 
-  /** DELETE /api/admin/groups/:id — Soft delete */
+  /** DELETE /:id — Soft delete */
   router.delete('/:id', async (req: Request, res: Response) => {
-    const { tenantId } = req as TenantScopedRequest;
+    const { venueId } = req as VenueScopedRequest;
     const id = String(req.params.id);
 
     const [existing] = await db
       .select()
       .from(groups)
-      .innerJoin(venues, eq(groups.venueId, venues.id))
-      .where(and(eq(groups.id, id), eq(venues.tenantId, tenantId), isNull(groups.deletedAt)));
+      .where(and(eq(groups.id, id), eq(groups.venueId, venueId), isNull(groups.deletedAt)));
 
     if (!existing) {
       throw new AppError(ErrorCode.NOT_FOUND, 'Group not found', 404);
@@ -165,10 +151,21 @@ export function createGroupRoutes(db: Database, qrService: QrService): RouterTyp
     res.status(204).send();
   });
 
-  /** POST /api/admin/groups/:id/endpoints — Add endpoints to group */
+  /** POST /:id/endpoints — Add endpoints to group */
   router.post('/:id/endpoints', async (req: Request, res: Response) => {
+    const { venueId } = req as VenueScopedRequest;
     const id = String(req.params.id);
     const body = addEndpointsSchema.parse(req.body);
+
+    // Verify group belongs to this venue
+    const [group] = await db
+      .select()
+      .from(groups)
+      .where(and(eq(groups.id, id), eq(groups.venueId, venueId), isNull(groups.deletedAt)));
+
+    if (!group) {
+      throw new AppError(ErrorCode.NOT_FOUND, 'Group not found', 404);
+    }
 
     const existing = await db
       .select({ displayOrder: groupEndpoints.displayOrder })
@@ -187,10 +184,21 @@ export function createGroupRoutes(db: Database, qrService: QrService): RouterTyp
     res.status(201).json({ success: true, data: { added: body.endpointIds.length } });
   });
 
-  /** DELETE /api/admin/groups/:id/endpoints/:endpointId — Remove endpoint from group */
+  /** DELETE /:id/endpoints/:endpointId — Remove endpoint from group */
   router.delete('/:id/endpoints/:endpointId', async (req: Request, res: Response) => {
+    const { venueId } = req as VenueScopedRequest;
     const groupId = String(req.params.id);
     const endpointId = String(req.params.endpointId);
+
+    // Verify group belongs to this venue
+    const [group] = await db
+      .select()
+      .from(groups)
+      .where(and(eq(groups.id, groupId), eq(groups.venueId, venueId), isNull(groups.deletedAt)));
+
+    if (!group) {
+      throw new AppError(ErrorCode.NOT_FOUND, 'Group not found', 404);
+    }
 
     await db
       .delete(groupEndpoints)
@@ -201,9 +209,20 @@ export function createGroupRoutes(db: Database, qrService: QrService): RouterTyp
 
   // ─── Group Access Tokens ───────────────────────────────────────────
 
-  /** GET /api/admin/groups/:id/tokens — List tokens for group */
+  /** GET /:id/tokens — List tokens for group */
   router.get('/:id/tokens', async (req: Request, res: Response) => {
+    const { venueId } = req as VenueScopedRequest;
     const groupId = String(req.params.id);
+
+    // Verify group belongs to this venue
+    const [group] = await db
+      .select()
+      .from(groups)
+      .where(and(eq(groups.id, groupId), eq(groups.venueId, venueId), isNull(groups.deletedAt)));
+
+    if (!group) {
+      throw new AppError(ErrorCode.NOT_FOUND, 'Group not found', 404);
+    }
 
     const tokens = await db
       .select()
@@ -214,18 +233,17 @@ export function createGroupRoutes(db: Database, qrService: QrService): RouterTyp
     res.json({ success: true, data: tokens });
   });
 
-  /** POST /api/admin/groups/:id/tokens — Create new access token */
+  /** POST /:id/tokens — Create new access token */
   router.post('/:id/tokens', async (req: Request, res: Response) => {
-    const { tenantId } = req as TenantScopedRequest;
+    const { venueId, tenantId } = req as VenueScopedRequest;
     const groupId = String(req.params.id);
     const body = createTokenSchema.parse(req.body);
 
-    // Verify group belongs to tenant
+    // Verify group belongs to this venue
     const [group] = await db
       .select()
       .from(groups)
-      .innerJoin(venues, eq(groups.venueId, venues.id))
-      .where(and(eq(groups.id, groupId), eq(venues.tenantId, tenantId)));
+      .where(and(eq(groups.id, groupId), eq(groups.venueId, venueId), isNull(groups.deletedAt)));
 
     if (!group) {
       throw new AppError(ErrorCode.NOT_FOUND, 'Group not found', 404);
@@ -246,10 +264,8 @@ export function createGroupRoutes(db: Database, qrService: QrService): RouterTyp
       .returning();
 
     // Generate QR code
-    const venue = group.venues;
-    const tenant = await db.query.tenants.findFirst({
-      where: (t, { eq }) => eq(t.id, tenantId),
-    });
+    const [venue] = await db.select().from(venues).where(eq(venues.id, venueId));
+    const [tenant] = await db.select().from(tenants).where(eq(tenants.id, tenantId));
 
     if (tenant && venue) {
       await qrService.generateAndSave(token, tenant.slug, venue.slug, groupId);
@@ -258,11 +274,21 @@ export function createGroupRoutes(db: Database, qrService: QrService): RouterTyp
     res.status(201).json({ success: true, data: created });
   });
 
-  /** POST /api/admin/groups/:id/tokens/rotate — Rotate active token */
+  /** POST /:id/tokens/rotate — Rotate active token */
   router.post('/:id/tokens/rotate', async (req: Request, res: Response) => {
-    const { tenantId } = req as TenantScopedRequest;
+    const { venueId, tenantId } = req as VenueScopedRequest;
     const groupId = String(req.params.id);
     const body = createTokenSchema.parse(req.body);
+
+    // Verify group belongs to this venue
+    const [existingGroup] = await db
+      .select()
+      .from(groups)
+      .where(and(eq(groups.id, groupId), eq(groups.venueId, venueId), isNull(groups.deletedAt)));
+
+    if (!existingGroup) {
+      throw new AppError(ErrorCode.NOT_FOUND, 'Group not found', 404);
+    }
 
     // Deactivate current active token
     await db
@@ -292,27 +318,31 @@ export function createGroupRoutes(db: Database, qrService: QrService): RouterTyp
       .returning();
 
     // Regenerate QR code
-    const [group] = await db
-      .select()
-      .from(groups)
-      .innerJoin(venues, eq(groups.venueId, venues.id))
-      .where(eq(groups.id, groupId));
+    const [venue] = await db.select().from(venues).where(eq(venues.id, venueId));
+    const [tenant] = await db.select().from(tenants).where(eq(tenants.id, tenantId));
 
-    if (group) {
-      const tenant = await db.query.tenants.findFirst({
-        where: (t, { eq }) => eq(t.id, tenantId),
-      });
-      if (tenant) {
-        await qrService.generateAndSave(token, tenant.slug, group.venues.slug, groupId);
-      }
+    if (tenant && venue) {
+      await qrService.generateAndSave(token, tenant.slug, venue.slug, groupId);
     }
 
     res.json({ success: true, data: created });
   });
 
-  /** DELETE /api/admin/groups/:id/tokens/:tokenId — Revoke token */
+  /** DELETE /:id/tokens/:tokenId — Revoke token */
   router.delete('/:id/tokens/:tokenId', async (req: Request, res: Response) => {
+    const { venueId } = req as VenueScopedRequest;
+    const groupId = String(req.params.id);
     const tokenId = String(req.params.tokenId);
+
+    // Verify group belongs to this venue
+    const [group] = await db
+      .select()
+      .from(groups)
+      .where(and(eq(groups.id, groupId), eq(groups.venueId, venueId), isNull(groups.deletedAt)));
+
+    if (!group) {
+      throw new AppError(ErrorCode.NOT_FOUND, 'Group not found', 404);
+    }
 
     await db
       .update(groupAccessTokens)

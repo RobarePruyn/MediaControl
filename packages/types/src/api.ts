@@ -53,6 +53,8 @@ export interface LoginResponse {
     email: string;
     role: UserRole;
     tenantId: string;
+    /** Venue IDs this user has access to (not in JWT — loaded per-request on server) */
+    venueIds: string[];
   };
 }
 
@@ -185,6 +187,7 @@ export interface UpdateVenueRequest {
   name?: string;
   slug?: string;
   timezone?: string;
+  customDomain?: string | null;
 }
 
 // ─── Admin: Events ─────────────────────────────────────────────────────
@@ -325,4 +328,49 @@ export interface TriggerExecutionResponse {
   executionId: string;
   state: string;
   startedAt: string;
+}
+
+// ─── Admin: User Management ──────────────────────────────────────────
+
+/** Create user request */
+export interface CreateUserRequest {
+  email: string;
+  password: string;
+  role: UserRole;
+  venueIds?: string[];
+}
+
+/** Update user request */
+export interface UpdateUserRequest {
+  email?: string;
+  role?: UserRole;
+  isActive?: boolean;
+}
+
+/** Assign venues to user request */
+export interface AssignVenuesRequest {
+  venueIds: string[];
+}
+
+/** User with venue assignments (for admin list view) */
+export interface UserWithVenues {
+  id: string;
+  tenantId: string;
+  email: string;
+  role: UserRole;
+  authProvider: string | null;
+  isActive: boolean;
+  createdAt: string;
+  lastLoginAt: string | null;
+  venueIds: string[];
+}
+
+// ─── Control: Domain Resolution ──────────────────────────────────────
+
+/** Resolve venue by custom domain */
+export interface DomainResolutionResponse {
+  venueId: string;
+  venueName: string;
+  venueSlug: string;
+  tenantId: string;
 }

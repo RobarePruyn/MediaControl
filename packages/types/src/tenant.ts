@@ -7,8 +7,8 @@
 /** Plan tiers available for tenants */
 export type PlanTier = 'basic' | 'professional' | 'enterprise';
 
-/** User roles within the system */
-export type UserRole = 'meta_admin' | 'site_admin' | 'operator';
+/** User roles within the system — 5-tier hierarchy */
+export type UserRole = 'super_admin' | 'app_admin' | 'venue_super_admin' | 'venue_operator' | 'end_user';
 
 /** Group types representing physical spaces in a venue */
 export type GroupType = 'suite' | 'room' | 'zone' | 'boh';
@@ -38,6 +38,8 @@ export interface Venue {
   accentColor: string | null;
   /** IANA timezone string (e.g., "America/New_York") — used for token rotation ceiling */
   timezone: string;
+  /** Per-venue custom domain for the control UI (e.g., "control.yankees.com") */
+  customDomain?: string | null;
   createdAt: string;
 }
 
@@ -186,6 +188,14 @@ export interface User {
   isActive: boolean;
   createdAt: string;
   lastLoginAt: string | null;
+}
+
+/** User-to-venue assignment — controls which venues a user can access */
+export interface UserVenueAssignment {
+  id: string;
+  userId: string;
+  venueId: string;
+  assignedAt: string;
 }
 
 /** Audit log entry */

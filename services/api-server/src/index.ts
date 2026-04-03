@@ -33,6 +33,9 @@ import { createEventRoutes } from './routes/admin/events.js';
 import { createTlsRoutes } from './routes/admin/tls.js';
 import { createIdentityProviderRoutes } from './routes/admin/identityProviders.js';
 import { createTriggerRoutes } from './routes/admin/triggers.js';
+import { createUserRoutes } from './routes/admin/users.js';
+import { requireVenueAccess } from './middleware/permissions.js';
+import { requireRole } from './middleware/auth.js';
 import { createQrRoutes } from './routes/qr/index.js';
 import { createControlRoutes } from './routes/control/index.js';
 import { initWebSocketHub } from './websocket/index.js';
@@ -78,17 +81,24 @@ const adminRouter = express.Router();
 adminRouter.use(requireAuth(config.JWT_ACCESS_SECRET));
 adminRouter.use(tenantScope);
 
+// Tenant-wide routes (not venue-scoped)
 adminRouter.use('/tenants', createTenantRoutes(db));
 adminRouter.use('/venues', createVenueRoutes(db));
-adminRouter.use('/controllers', createControllerRoutes(db, bridgeClient, config.CREDENTIAL_ENCRYPTION_KEY));
-adminRouter.use('/endpoints', createEndpointRoutes(db));
-adminRouter.use('/groups', createGroupRoutes(db, qrService));
-adminRouter.use('/channels', createChannelRoutes(db, bridgeClient, config.CREDENTIAL_ENCRYPTION_KEY));
-adminRouter.use('/branding', createBrandingRoutes(db));
-adminRouter.use('/events', createEventRoutes(db));
-adminRouter.use('/tls', createTlsRoutes(db, config.QR_STORAGE_PATH.replace('qr-storage', 'tls-storage')));
-adminRouter.use('/identity-providers', createIdentityProviderRoutes(db, config.CREDENTIAL_ENCRYPTION_KEY));
-adminRouter.use('/triggers', createTriggerRoutes(db, bridgeClient, stateCache, config.CREDENTIAL_ENCRYPTION_KEY));
+adminRouter.use('/users', createUserRoutes(db));
+adminRouter.use('/tls', requireRole('super_admin', 'app_admin'), createTlsRoutes(db, config.QR_STORAGE_PATH.replace('qr-storage', 'tls-storage')));
+adminRouter.use('/identity-providers', requireRole('super_admin', 'app_admin'), createIdentityProviderRoutes(db, config.CREDENTIAL_ENCRYPTION_KEY));
+
+// Venue-scoped routes — mounted under /venues/:venueId
+const venueRouter = express.Router({ mergeParams: true });
+venueRouter.use(requireVenueAccess(db));
+venueRouter.use('/controllers', createControllerRoutes(db, bridgeClient, config.CREDENTIAL_ENCRYPTION_KEY));
+venueRouter.use('/endpoints', createEndpointRoutes(db));
+venueRouter.use('/groups', createGroupRoutes(db, qrService));
+venueRouter.use('/channels', createChannelRoutes(db, bridgeClient, config.CREDENTIAL_ENCRYPTION_KEY));
+venueRouter.use('/branding', createBrandingRoutes(db));
+venueRouter.use('/events', createEventRoutes(db));
+venueRouter.use('/triggers', createTriggerRoutes(db, bridgeClient, stateCache, config.CREDENTIAL_ENCRYPTION_KEY));
+adminRouter.use('/venues/:venueId', venueRouter);
 
 app.use('/api/admin', adminRouter);
 

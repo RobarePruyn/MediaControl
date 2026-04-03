@@ -21,7 +21,7 @@ import {
 // ─── Enums ─────────────────────────────────────────────────────────────
 
 export const planTierEnum = pgEnum('plan_tier', ['basic', 'professional', 'enterprise']);
-export const userRoleEnum = pgEnum('user_role', ['meta_admin', 'site_admin', 'operator']);
+export const userRoleEnum = pgEnum('user_role', ['super_admin', 'app_admin', 'venue_super_admin', 'venue_operator', 'end_user']);
 export const groupTypeEnum = pgEnum('group_type', ['suite', 'room', 'zone', 'boh']);
 export const accessTierEnum = pgEnum('access_tier', ['event', 'seasonal', 'permanent']);
 export const idpProtocolEnum = pgEnum('idp_protocol', ['oidc', 'saml', 'ldap']);
@@ -53,6 +53,8 @@ export const venues = pgTable('venues', {
   accentColor: varchar('accent_color', { length: 20 }),
   /** IANA timezone string — required for daily token rotation ceiling calculation */
   timezone: varchar('timezone', { length: 64 }).notNull().default('America/New_York'),
+  /** Per-venue custom domain for the control UI (e.g., "control.yankees.com") */
+  customDomain: varchar('custom_domain', { length: 255 }),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   deletedAt: timestamp('deleted_at', { withTimezone: true }),
 }, (table) => [
@@ -228,7 +230,7 @@ export const users = pgTable('users', {
   email: varchar('email', { length: 255 }).notNull().unique(),
   /** Nullable for SSO-only users who never set a local password */
   hashedPassword: text('hashed_password'),
-  role: userRoleEnum('role').notNull().default('operator'),
+  role: userRoleEnum('role').notNull().default('venue_operator'),
   /** Null for local auth, or the identity_provider slug for SSO users */
   authProvider: varchar('auth_provider', { length: 100 }),
   /** External subject/nameID from the IdP for SSO users */
@@ -239,6 +241,18 @@ export const users = pgTable('users', {
   deletedAt: timestamp('deleted_at', { withTimezone: true }),
 }, (table) => [
   index('users_tenant_id_idx').on(table.tenantId),
+]);
+
+// ─── User Venues (Many-to-Many: User ↔ Venue Access) ──────────────────
+
+export const userVenues = pgTable('user_venues', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  userId: uuid('user_id').notNull().references(() => users.id),
+  venueId: uuid('venue_id').notNull().references(() => venues.id),
+  assignedAt: timestamp('assigned_at', { withTimezone: true }).notNull().defaultNow(),
+}, (table) => [
+  index('user_venues_user_id_idx').on(table.userId),
+  index('user_venues_venue_id_idx').on(table.venueId),
 ]);
 
 // ─── Refresh Tokens ────────────────────────────────────────────────────
@@ -395,6 +409,7 @@ export const venuesRelations = relations(venues, ({ one, many }) => ({
   channels: many(channels),
   triggers: many(triggers),
   brandingConfig: one(brandingConfigs, { fields: [venues.id], references: [brandingConfigs.venueId] }),
+  userVenues: many(userVenues),
 }));
 
 export const brandingConfigsRelations = relations(brandingConfigs, ({ one }) => ({
@@ -451,6 +466,12 @@ export const groupChannelItemsRelations = relations(groupChannelItems, ({ one })
 export const usersRelations = relations(users, ({ one, many }) => ({
   tenant: one(tenants, { fields: [users.tenantId], references: [tenants.id] }),
   refreshTokens: many(refreshTokens),
+  userVenues: many(userVenues),
+}));
+
+export const userVenuesRelations = relations(userVenues, ({ one }) => ({
+  user: one(users, { fields: [userVenues.userId], references: [users.id] }),
+  venue: one(venues, { fields: [userVenues.venueId], references: [venues.id] }),
 }));
 
 export const refreshTokensRelations = relations(refreshTokens, ({ one }) => ({

@@ -4,15 +4,20 @@
  * @module admin-ui/pages/DashboardPage
  */
 
-import { useControllers, useEndpoints, useGroups, useEvents } from '../api/hooks.js';
+import { useState } from 'react';
+import { useControllers, useEndpoints, useGroups, useEvents, useVenues } from '../api/hooks.js';
 import { Cpu, Monitor, Layers, CalendarDays, Activity, AlertTriangle } from 'lucide-react';
 import './pages.css';
 
 export function DashboardPage() {
-  const controllers = useControllers();
-  const endpoints = useEndpoints();
-  const groups = useGroups();
-  const events = useEvents();
+  const { data: venues } = useVenues();
+  const [venueId, setVenueId] = useState('');
+  const activeVenueId = venueId || venues?.[0]?.id || '';
+
+  const controllers = useControllers(activeVenueId);
+  const endpoints = useEndpoints(activeVenueId);
+  const groups = useGroups(activeVenueId);
+  const events = useEvents(activeVenueId);
 
   const stats = [
     {
@@ -51,6 +56,13 @@ export function DashboardPage() {
     <div className="page">
       <div className="page-header">
         <h2 className="page-title">Dashboard</h2>
+        {venues && venues.length > 1 && (
+          <select value={activeVenueId} onChange={(e) => setVenueId(e.target.value)}>
+            {venues.map((v) => (
+              <option key={v.id} value={v.id}>{v.name}</option>
+            ))}
+          </select>
+        )}
       </div>
 
       <div className="stats-grid">

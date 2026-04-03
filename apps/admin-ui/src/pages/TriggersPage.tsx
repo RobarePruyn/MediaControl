@@ -1,10 +1,12 @@
 /**
  * Triggers management page.
  * Create, configure, execute, and monitor automation triggers.
+ * Venue ID is derived from the URL route parameter.
  * @module admin-ui/pages/TriggersPage
  */
 
 import { useState, useEffect, type FormEvent } from 'react';
+import { useParams } from 'react-router-dom';
 import {
   useTriggers,
   useCreateTrigger,
@@ -13,25 +15,24 @@ import {
   useExecuteTrigger,
   useTriggerExecutions,
   useCancelExecution,
-  useVenues,
 } from '../api/hooks.js';
 import { Plus, Pencil, Play, Trash2, XCircle, Clock } from 'lucide-react';
 import type { Trigger } from '@suitecommand/types';
 import './pages.css';
 
 export function TriggersPage() {
-  const { data: triggers, isLoading } = useTriggers();
-  const { data: venues } = useVenues();
-  const createTrigger = useCreateTrigger();
-  const updateTrigger = useUpdateTrigger();
-  const deleteTrigger = useDeleteTrigger();
-  const executeTrigger = useExecuteTrigger();
+  const { venueId } = useParams<{ venueId: string }>();
+
+  const { data: triggers, isLoading } = useTriggers(venueId!);
+  const createTrigger = useCreateTrigger(venueId!);
+  const updateTrigger = useUpdateTrigger(venueId!);
+  const deleteTrigger = useDeleteTrigger(venueId!);
+  const executeTrigger = useExecuteTrigger(venueId!);
   const [showCreate, setShowCreate] = useState(false);
   const [editing, setEditing] = useState<Trigger | null>(null);
   const [execTrigger, setExecTrigger] = useState<Trigger | null>(null);
 
   const [name, setName] = useState('');
-  const [venueId, setVenueId] = useState('');
   const [description, setDescription] = useState('');
 
   const [editName, setEditName] = useState('');
@@ -50,7 +51,7 @@ export function TriggersPage() {
     e.preventDefault();
     await createTrigger.mutateAsync({
       name,
-      venueId: venueId || venues?.[0]?.id || '',
+      venueId: venueId!,
       description: description || undefined,
     });
     setShowCreate(false);
@@ -77,9 +78,11 @@ export function TriggersPage() {
     <div className="page">
       <div className="page-header">
         <h2 className="page-title">Triggers</h2>
-        <button className="btn-primary" onClick={() => setShowCreate(true)}>
-          <Plus size={16} /> Add Trigger
-        </button>
+        <div className="page-actions">
+          <button className="btn-primary" onClick={() => setShowCreate(true)}>
+            <Plus size={16} /> Add Trigger
+          </button>
+        </div>
       </div>
 
       {isLoading ? (
@@ -138,16 +141,6 @@ export function TriggersPage() {
                 <label>Name</label>
                 <input value={name} onChange={(e) => setName(e.target.value)} required autoFocus />
               </div>
-              {venues && venues.length > 0 && (
-                <div className="form-group">
-                  <label>Venue</label>
-                  <select value={venueId || venues[0]?.id} onChange={(e) => setVenueId(e.target.value)}>
-                    {venues.map((v) => (
-                      <option key={v.id} value={v.id}>{v.name}</option>
-                    ))}
-                  </select>
-                </div>
-              )}
               <div className="form-group">
                 <label>Description (optional)</label>
                 <textarea value={description} onChange={(e) => setDescription(e.target.value)} rows={2} />
@@ -194,15 +187,15 @@ export function TriggersPage() {
       )}
 
       {execTrigger && (
-        <ExecutionsModal trigger={execTrigger} onClose={() => setExecTrigger(null)} />
+        <ExecutionsModal venueId={venueId!} trigger={execTrigger} onClose={() => setExecTrigger(null)} />
       )}
     </div>
   );
 }
 
-function ExecutionsModal({ trigger, onClose }: { trigger: Trigger; onClose: () => void }) {
-  const { data: executions, isLoading } = useTriggerExecutions(trigger.id);
-  const cancelExecution = useCancelExecution();
+function ExecutionsModal({ venueId, trigger, onClose }: { venueId: string; trigger: Trigger; onClose: () => void }) {
+  const { data: executions, isLoading } = useTriggerExecutions(venueId, trigger.id);
+  const cancelExecution = useCancelExecution(venueId);
 
   const stateColor: Record<string, string> = {
     running: 'badge-info',

@@ -5,13 +5,13 @@
  */
 
 import { Router, type Request, type Response, type Router as RouterType } from 'express';
-import { eq, and } from 'drizzle-orm';
+import { eq } from 'drizzle-orm';
 import { z } from 'zod';
 import multer from 'multer';
 
 import type { Database } from '../../db/client.js';
-import { brandingConfigs, venues } from '../../db/schema.js';
-import type { TenantScopedRequest } from '../../middleware/tenantScope.js';
+import { brandingConfigs } from '../../db/schema.js';
+import type { VenueScopedRequest } from '../../middleware/permissions.js';
 import { AppError, ErrorCode } from '../../errors.js';
 
 const updateSchema = z.object({
@@ -38,26 +38,11 @@ const upload = multer({
  * @param db - Database client
  */
 export function createBrandingRoutes(db: Database): RouterType {
-  const router: RouterType = Router();
+  const router: RouterType = Router({ mergeParams: true });
 
-  /** GET /api/admin/branding — Get branding config for venue */
+  /** GET / — Get branding config for venue */
   router.get('/', async (req: Request, res: Response) => {
-    const { tenantId } = req as TenantScopedRequest;
-    const venueId = req.query.venueId as string | undefined;
-
-    if (!venueId) {
-      throw new AppError(ErrorCode.BAD_REQUEST, 'venueId query parameter required', 400);
-    }
-
-    // Verify venue belongs to tenant
-    const [venue] = await db
-      .select()
-      .from(venues)
-      .where(and(eq(venues.id, venueId), eq(venues.tenantId, tenantId)));
-
-    if (!venue) {
-      throw new AppError(ErrorCode.NOT_FOUND, 'Venue not found', 404);
-    }
+    const { venueId } = req as VenueScopedRequest;
 
     const [config] = await db
       .select()
@@ -67,23 +52,10 @@ export function createBrandingRoutes(db: Database): RouterType {
     res.json({ success: true, data: config ?? null });
   });
 
-  /** PUT /api/admin/branding — Update branding config (upsert) */
+  /** PUT / — Update branding config (upsert) */
   router.put('/', async (req: Request, res: Response) => {
-    const { tenantId } = req as TenantScopedRequest;
-    const { venueId, ...body } = z.object({
-      venueId: z.string().uuid(),
-      ...updateSchema.shape,
-    }).parse(req.body);
-
-    // Verify venue belongs to tenant
-    const [venue] = await db
-      .select()
-      .from(venues)
-      .where(and(eq(venues.id, venueId), eq(venues.tenantId, tenantId)));
-
-    if (!venue) {
-      throw new AppError(ErrorCode.NOT_FOUND, 'Venue not found', 404);
-    }
+    const { venueId } = req as VenueScopedRequest;
+    const body = updateSchema.parse(req.body);
 
     // Check if branding config exists
     const [existing] = await db
@@ -108,13 +80,12 @@ export function createBrandingRoutes(db: Database): RouterType {
     res.json({ success: true, data: result });
   });
 
-  /** POST /api/admin/branding/logo — Upload logo */
+  /** POST /logo — Upload logo */
   router.post('/logo', upload.single('logo'), async (req: Request, res: Response) => {
-    const { tenantId } = req as TenantScopedRequest;
-    const venueId = req.body.venueId as string;
+    const { venueId } = req as VenueScopedRequest;
 
-    if (!venueId || !req.file) {
-      throw new AppError(ErrorCode.BAD_REQUEST, 'venueId and logo file required', 400);
+    if (!req.file) {
+      throw new AppError(ErrorCode.BAD_REQUEST, 'Logo file required', 400);
     }
 
     // In production, upload to object storage and get URL

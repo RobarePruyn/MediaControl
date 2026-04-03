@@ -15,9 +15,8 @@ import {
   triggerActions,
   triggerTargets,
   triggerExecutions,
-  venues,
 } from '../../db/schema.js';
-import type { TenantScopedRequest } from '../../middleware/tenantScope.js';
+import type { VenueScopedRequest } from '../../middleware/permissions.js';
 import type { AuthenticatedRequest } from '../../middleware/auth.js';
 import type { BridgeClient } from '../../services/bridgeClient.js';
 import type { StateCache } from '../../services/stateCache.js';
@@ -26,7 +25,6 @@ import { AppError, ErrorCode } from '../../errors.js';
 
 const createSchema = z.object({
   name: z.string().min(1).max(255),
-  venueId: z.string().uuid(),
   description: z.string().optional(),
 });
 
@@ -64,40 +62,30 @@ export function createTriggerRoutes(
   stateCache?: StateCache,
   encryptionKey?: string,
 ): RouterType {
-  const router: RouterType = Router();
+  const router: RouterType = Router({ mergeParams: true });
 
-  /** GET /api/admin/triggers — List triggers for venue */
+  /** GET / — List triggers for venue */
   router.get('/', async (req: Request, res: Response) => {
-    const { tenantId } = req as TenantScopedRequest;
+    const { venueId } = req as VenueScopedRequest;
 
     const result = await db
-      .select({ trigger: triggers })
+      .select()
       .from(triggers)
-      .innerJoin(venues, eq(triggers.venueId, venues.id))
-      .where(and(eq(venues.tenantId, tenantId), isNull(triggers.deletedAt)));
+      .where(and(eq(triggers.venueId, venueId), isNull(triggers.deletedAt)));
 
-    res.json({ success: true, data: result.map((r) => r.trigger) });
+    res.json({ success: true, data: result });
   });
 
-  /** POST /api/admin/triggers — Create trigger */
+  /** POST / — Create trigger */
   router.post('/', async (req: Request, res: Response) => {
-    const { tenantId } = req as TenantScopedRequest;
+    const { venueId } = req as VenueScopedRequest;
     const { user } = req as AuthenticatedRequest;
     const body = createSchema.parse(req.body);
-
-    const [venue] = await db
-      .select()
-      .from(venues)
-      .where(and(eq(venues.id, body.venueId), eq(venues.tenantId, tenantId)));
-
-    if (!venue) {
-      throw new AppError(ErrorCode.NOT_FOUND, 'Venue not found', 404);
-    }
 
     const [created] = await db
       .insert(triggers)
       .values({
-        venueId: body.venueId,
+        venueId,
         name: body.name,
         description: body.description,
         createdBy: user.sub,
@@ -107,18 +95,17 @@ export function createTriggerRoutes(
     res.status(201).json({ success: true, data: created });
   });
 
-  /** GET /api/admin/triggers/:id — Get trigger with actions and targets */
+  /** GET /:id — Get trigger with actions and targets */
   router.get('/:id', async (req: Request, res: Response) => {
-    const { tenantId } = req as TenantScopedRequest;
+    const { venueId } = req as VenueScopedRequest;
     const id = String(req.params.id);
 
-    const [result] = await db
-      .select({ trigger: triggers })
+    const [trigger] = await db
+      .select()
       .from(triggers)
-      .innerJoin(venues, eq(triggers.venueId, venues.id))
-      .where(and(eq(triggers.id, id), eq(venues.tenantId, tenantId), isNull(triggers.deletedAt)));
+      .where(and(eq(triggers.id, id), eq(triggers.venueId, venueId), isNull(triggers.deletedAt)));
 
-    if (!result) {
+    if (!trigger) {
       throw new AppError(ErrorCode.NOT_FOUND, 'Trigger not found', 404);
     }
 
@@ -135,19 +122,20 @@ export function createTriggerRoutes(
 
     res.json({
       success: true,
-      data: { ...result.trigger, actions, targets },
+      data: { ...trigger, actions, targets },
     });
   });
 
-  /** PATCH /api/admin/triggers/:id — Update trigger */
+  /** PATCH /:id — Update trigger */
   router.patch('/:id', async (req: Request, res: Response) => {
+    const { venueId } = req as VenueScopedRequest;
     const id = String(req.params.id);
     const body = updateSchema.parse(req.body);
 
     const [updated] = await db
       .update(triggers)
       .set({ ...body, updatedAt: new Date() })
-      .where(eq(triggers.id, id))
+      .where(and(eq(triggers.id, id), eq(triggers.venueId, venueId), isNull(triggers.deletedAt)))
       .returning();
 
     if (!updated) {
@@ -157,18 +145,39 @@ export function createTriggerRoutes(
     res.json({ success: true, data: updated });
   });
 
-  /** DELETE /api/admin/triggers/:id — Soft delete */
+  /** DELETE /:id — Soft delete */
   router.delete('/:id', async (req: Request, res: Response) => {
+    const { venueId } = req as VenueScopedRequest;
     const id = String(req.params.id);
+
+    const [existing] = await db
+      .select()
+      .from(triggers)
+      .where(and(eq(triggers.id, id), eq(triggers.venueId, venueId), isNull(triggers.deletedAt)));
+
+    if (!existing) {
+      throw new AppError(ErrorCode.NOT_FOUND, 'Trigger not found', 404);
+    }
 
     await db.update(triggers).set({ deletedAt: new Date() }).where(eq(triggers.id, id));
     res.status(204).send();
   });
 
-  /** POST /api/admin/triggers/:id/actions — Set action list (replace) */
+  /** POST /:id/actions — Set action list (replace) */
   router.post('/:id/actions', async (req: Request, res: Response) => {
+    const { venueId } = req as VenueScopedRequest;
     const id = String(req.params.id);
     const body = setActionsSchema.parse(req.body);
+
+    // Verify trigger belongs to this venue
+    const [existing] = await db
+      .select()
+      .from(triggers)
+      .where(and(eq(triggers.id, id), eq(triggers.venueId, venueId), isNull(triggers.deletedAt)));
+
+    if (!existing) {
+      throw new AppError(ErrorCode.NOT_FOUND, 'Trigger not found', 404);
+    }
 
     // Delete existing actions
     await db.delete(triggerActions).where(eq(triggerActions.triggerId, id));
@@ -190,10 +199,21 @@ export function createTriggerRoutes(
     res.json({ success: true, data: { actionCount: body.actions.length } });
   });
 
-  /** PUT /api/admin/triggers/:id/targets — Set target groups */
+  /** PUT /:id/targets — Set target groups */
   router.put('/:id/targets', async (req: Request, res: Response) => {
+    const { venueId } = req as VenueScopedRequest;
     const id = String(req.params.id);
     const body = setTargetsSchema.parse(req.body);
+
+    // Verify trigger belongs to this venue
+    const [existingTrigger] = await db
+      .select()
+      .from(triggers)
+      .where(and(eq(triggers.id, id), eq(triggers.venueId, venueId), isNull(triggers.deletedAt)));
+
+    if (!existingTrigger) {
+      throw new AppError(ErrorCode.NOT_FOUND, 'Trigger not found', 404);
+    }
 
     // Delete existing targets
     await db.delete(triggerTargets).where(eq(triggerTargets.triggerId, id));
@@ -212,16 +232,17 @@ export function createTriggerRoutes(
     res.json({ success: true, data: { targetCount: body.targets.length } });
   });
 
-  /** POST /api/admin/triggers/:id/execute — Start trigger execution */
+  /** POST /:id/execute — Start trigger execution */
   router.post('/:id/execute', async (req: Request, res: Response) => {
+    const { venueId } = req as VenueScopedRequest;
     const { user } = req as AuthenticatedRequest;
     const id = String(req.params.id);
 
-    // Verify trigger exists and is active
+    // Verify trigger exists, belongs to venue, and is active
     const [trigger] = await db
       .select()
       .from(triggers)
-      .where(and(eq(triggers.id, id), eq(triggers.isActive, true), isNull(triggers.deletedAt)));
+      .where(and(eq(triggers.id, id), eq(triggers.venueId, venueId), eq(triggers.isActive, true), isNull(triggers.deletedAt)));
 
     if (!trigger) {
       throw new AppError(ErrorCode.NOT_FOUND, 'Trigger not found or inactive', 404);
@@ -252,9 +273,20 @@ export function createTriggerRoutes(
     });
   });
 
-  /** POST /api/admin/triggers/:id/cancel — Cancel running execution */
+  /** POST /:id/cancel — Cancel running execution */
   router.post('/:id/cancel', async (req: Request, res: Response) => {
+    const { venueId } = req as VenueScopedRequest;
     const id = String(req.params.id);
+
+    // Verify trigger belongs to this venue
+    const [existingTrigger] = await db
+      .select()
+      .from(triggers)
+      .where(and(eq(triggers.id, id), eq(triggers.venueId, venueId), isNull(triggers.deletedAt)));
+
+    if (!existingTrigger) {
+      throw new AppError(ErrorCode.NOT_FOUND, 'Trigger not found', 404);
+    }
 
     const [execution] = await db
       .select()
@@ -273,9 +305,20 @@ export function createTriggerRoutes(
     res.json({ success: true, data: { executionId: execution.id, state: 'cancelled' } });
   });
 
-  /** GET /api/admin/triggers/:id/executions — List past executions */
+  /** GET /:id/executions — List past executions */
   router.get('/:id/executions', async (req: Request, res: Response) => {
+    const { venueId } = req as VenueScopedRequest;
     const id = String(req.params.id);
+
+    // Verify trigger belongs to this venue
+    const [existingTrigger] = await db
+      .select()
+      .from(triggers)
+      .where(and(eq(triggers.id, id), eq(triggers.venueId, venueId), isNull(triggers.deletedAt)));
+
+    if (!existingTrigger) {
+      throw new AppError(ErrorCode.NOT_FOUND, 'Trigger not found', 404);
+    }
 
     const result = await db
       .select()
@@ -286,7 +329,7 @@ export function createTriggerRoutes(
     res.json({ success: true, data: result });
   });
 
-  /** GET /api/admin/trigger-executions/:execId — Get execution detail */
+  /** GET /trigger-executions/:execId — Get execution detail */
   router.get('/trigger-executions/:execId', async (req: Request, res: Response) => {
     const execId = String(req.params.execId);
 

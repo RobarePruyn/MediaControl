@@ -9,8 +9,8 @@ import { eq, and, isNull, inArray } from 'drizzle-orm';
 import { z } from 'zod';
 
 import type { Database } from '../../db/client.js';
-import { endpoints, venues, groupEndpoints } from '../../db/schema.js';
-import type { TenantScopedRequest } from '../../middleware/tenantScope.js';
+import { endpoints, groupEndpoints } from '../../db/schema.js';
+import type { VenueScopedRequest } from '../../middleware/permissions.js';
 import { AppError, ErrorCode } from '../../errors.js';
 
 const updateSchema = z.object({
@@ -27,38 +27,33 @@ const bulkAssignSchema = z.object({
  * @param db - Database client
  */
 export function createEndpointRoutes(db: Database): RouterType {
-  const router: RouterType = Router();
+  const router: RouterType = Router({ mergeParams: true });
 
-  /** GET /api/admin/endpoints — List endpoints (filterable) */
+  /** GET / — List endpoints for venue (filterable) */
   router.get('/', async (req: Request, res: Response) => {
-    const { tenantId } = req as TenantScopedRequest;
+    const { venueId } = req as VenueScopedRequest;
 
-    let query = db
+    const result = await db
       .select()
       .from(endpoints)
-      .innerJoin(venues, eq(endpoints.venueId, venues.id))
-      .where(and(eq(venues.tenantId, tenantId), isNull(endpoints.deletedAt)))
-      .$dynamic();
-
-    const result = await query;
+      .where(and(eq(endpoints.venueId, venueId), isNull(endpoints.deletedAt)));
 
     res.json({
       success: true,
-      data: result.map((r) => r.endpoints),
+      data: result,
     });
   });
 
-  /** PATCH /api/admin/endpoints/:id — Update endpoint */
+  /** PATCH /:id — Update endpoint */
   router.patch('/:id', async (req: Request, res: Response) => {
-    const { tenantId } = req as TenantScopedRequest;
+    const { venueId } = req as VenueScopedRequest;
     const id = String(req.params.id);
     const body = updateSchema.parse(req.body);
 
     const [existing] = await db
       .select()
       .from(endpoints)
-      .innerJoin(venues, eq(endpoints.venueId, venues.id))
-      .where(and(eq(endpoints.id, id), eq(venues.tenantId, tenantId), isNull(endpoints.deletedAt)));
+      .where(and(eq(endpoints.id, id), eq(endpoints.venueId, venueId), isNull(endpoints.deletedAt)));
 
     if (!existing) {
       throw new AppError(ErrorCode.NOT_FOUND, 'Endpoint not found', 404);
@@ -76,26 +71,25 @@ export function createEndpointRoutes(db: Database): RouterType {
     res.json({ success: true, data: updated });
   });
 
-  /** POST /api/admin/endpoints/bulk-assign — Assign multiple endpoints to a group */
+  /** POST /bulk-assign — Assign multiple endpoints to a group */
   router.post('/bulk-assign', async (req: Request, res: Response) => {
-    const { tenantId } = req as TenantScopedRequest;
+    const { venueId } = req as VenueScopedRequest;
     const body = bulkAssignSchema.parse(req.body);
 
-    // Verify all endpoints belong to tenant
-    const tenantEndpoints = await db
+    // Verify all endpoints belong to this venue
+    const venueEndpoints = await db
       .select({ id: endpoints.id })
       .from(endpoints)
-      .innerJoin(venues, eq(endpoints.venueId, venues.id))
       .where(
         and(
           inArray(endpoints.id, body.endpointIds),
-          eq(venues.tenantId, tenantId),
+          eq(endpoints.venueId, venueId),
           isNull(endpoints.deletedAt),
         ),
       );
 
-    if (tenantEndpoints.length !== body.endpointIds.length) {
-      throw new AppError(ErrorCode.FORBIDDEN, 'Some endpoints do not belong to your tenant', 403);
+    if (venueEndpoints.length !== body.endpointIds.length) {
+      throw new AppError(ErrorCode.FORBIDDEN, 'Some endpoints do not belong to this venue', 403);
     }
 
     // Get current max display order for the group

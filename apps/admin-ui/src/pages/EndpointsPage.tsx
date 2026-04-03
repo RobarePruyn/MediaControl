@@ -1,23 +1,27 @@
 /**
  * Endpoints management page.
  * Lists discovered endpoints with filtering and bulk assignment.
+ * Venue ID is derived from the URL route parameter.
  * @module admin-ui/pages/EndpointsPage
  */
 
 import { useState } from 'react';
+import { useParams } from 'react-router-dom';
 import { useEndpoints, useGroups, useControllers, useBulkAssignEndpoints } from '../api/hooks.js';
 import './pages.css';
 
 export function EndpointsPage() {
+  const { venueId } = useParams<{ venueId: string }>();
+
   const [filterController, setFilterController] = useState('');
   const [filterAssigned, setFilterAssigned] = useState('');
-  const { data: endpoints, isLoading } = useEndpoints({
+  const { data: endpoints, isLoading } = useEndpoints(venueId!, {
     controllerId: filterController || undefined,
     assigned: filterAssigned || undefined,
   });
-  const { data: groups } = useGroups();
-  const { data: controllers } = useControllers();
-  const bulkAssign = useBulkAssignEndpoints();
+  const { data: groups } = useGroups(venueId!);
+  const { data: controllers } = useControllers(venueId!);
+  const bulkAssign = useBulkAssignEndpoints(venueId!);
 
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [assignGroupId, setAssignGroupId] = useState('');

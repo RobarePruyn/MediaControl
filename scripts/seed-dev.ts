@@ -104,10 +104,45 @@ async function main(): Promise<void> {
       tenantId,
       email: 'admin@suitecommand.local',
       hashedPassword,
-      role: 'site_admin',
+      role: 'super_admin',
       isActive: true,
     });
-    console.log('  Created user: admin@suitecommand.local (site_admin)');
+    console.log('  Created user: admin@suitecommand.local (super_admin)');
+
+    // ─── 3b. Additional Test Users ──────────────────────────────────
+
+    const venueAdminId = randomUUID();
+    const venueOperatorId = randomUUID();
+
+    const hashedPassword2 = await bcrypt.hash('admin123', BCRYPT_ROUNDS);
+    await db.insert(schema.users).values([
+      {
+        id: venueAdminId,
+        tenantId,
+        email: 'venueadmin@suitecommand.local',
+        hashedPassword: hashedPassword2,
+        role: 'venue_super_admin',
+        isActive: true,
+      },
+      {
+        id: venueOperatorId,
+        tenantId,
+        email: 'operator@suitecommand.local',
+        hashedPassword: hashedPassword2,
+        role: 'venue_operator',
+        isActive: true,
+      },
+    ]);
+    console.log('  Created user: venueadmin@suitecommand.local (venue_super_admin)');
+    console.log('  Created user: operator@suitecommand.local (venue_operator)');
+
+    // ─── 3c. User-Venue Assignments ──────────────────────────────────
+
+    await db.insert(schema.userVenues).values([
+      { userId: venueAdminId, venueId },
+      { userId: venueOperatorId, venueId },
+    ]);
+    console.log('  Assigned venueadmin and operator to Demo Arena');
 
     // ─── 4. Controller ────────────────────────────────────────────────
 

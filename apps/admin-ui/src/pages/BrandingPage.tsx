@@ -1,16 +1,20 @@
 /**
  * Branding configuration page.
  * Allows admins to customize the end-user control UI appearance.
+ * Venue ID is derived from the URL route parameter.
  * @module admin-ui/pages/BrandingPage
  */
 
 import { useState, useEffect, type FormEvent } from 'react';
+import { useParams } from 'react-router-dom';
 import { useBranding, useUpdateBranding } from '../api/hooks.js';
 import './pages.css';
 
 export function BrandingPage() {
-  const { data: branding, isLoading } = useBranding();
-  const updateBranding = useUpdateBranding();
+  const { venueId } = useParams<{ venueId: string }>();
+
+  const { data: branding, isLoading } = useBranding(venueId!);
+  const updateBranding = useUpdateBranding(venueId!);
 
   const [primaryColor, setPrimaryColor] = useState('#6366f1');
   const [secondaryColor, setSecondaryColor] = useState('#1e1b4b');

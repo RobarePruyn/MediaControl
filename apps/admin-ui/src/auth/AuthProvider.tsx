@@ -11,6 +11,7 @@ interface AuthUser {
   email: string;
   role: string;
   tenantId: string;
+  venueIds: string[];
 }
 
 interface AuthState {
@@ -22,6 +23,7 @@ interface AuthState {
   login: (email: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
   getAccessToken: () => string | null;
+  hasRole: (...roles: string[]) => boolean;
 }
 
 const AuthContext = createContext<AuthState | null>(null);
@@ -59,11 +61,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       // Decode user from JWT payload
       try {
         const payload = JSON.parse(atob(callbackAccess.split('.')[1]));
+        // Attempt to load venueIds from previously stored user data
+        const storedUser = localStorage.getItem('sc_user');
+        const storedVenueIds: string[] = storedUser
+          ? (JSON.parse(storedUser).venueIds ?? [])
+          : [];
         const u: AuthUser = {
           id: payload.sub,
           email: payload.email,
           role: payload.role,
           tenantId: payload.tenantId,
+          venueIds: payload.venueIds ?? storedVenueIds,
         };
         setUser(u);
         localStorage.setItem('sc_user', JSON.stringify(u));
@@ -119,6 +127,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const getAccessToken = useCallback(() => accessToken, [accessToken]);
 
+  /** Check if the current user's role is in the provided list */
+  const hasRole = useCallback(
+    (...roles: string[]) => (user ? roles.includes(user.role) : false),
+    [user],
+  );
+
   return (
     <AuthContext.Provider
       value={{
@@ -130,6 +144,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         login,
         logout,
         getAccessToken,
+        hasRole,
       }}
     >
       {children}

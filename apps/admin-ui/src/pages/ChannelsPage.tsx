@@ -1,29 +1,31 @@
 /**
  * Channels management page.
  * Lists channels, sync from controllers, and reorder.
+ * Venue ID is derived from the URL route parameter.
  * @module admin-ui/pages/ChannelsPage
  */
 
 import { useState, useEffect, type FormEvent } from 'react';
+import { useParams } from 'react-router-dom';
 import {
   useChannels,
   useCreateChannel,
   useUpdateChannel,
   useSyncChannels,
   useControllers,
-  useVenues,
 } from '../api/hooks.js';
 import { Plus, Pencil, RefreshCw } from 'lucide-react';
 import type { Channel } from '@suitecommand/types';
 import './pages.css';
 
 export function ChannelsPage() {
-  const { data: channels, isLoading } = useChannels();
-  const { data: controllers } = useControllers();
-  const { data: venues } = useVenues();
-  const createChannel = useCreateChannel();
-  const syncChannels = useSyncChannels();
-  const updateChannel = useUpdateChannel();
+  const { venueId } = useParams<{ venueId: string }>();
+
+  const { data: channels, isLoading } = useChannels(venueId!);
+  const { data: controllers } = useControllers(venueId!);
+  const createChannel = useCreateChannel(venueId!);
+  const syncChannels = useSyncChannels(venueId!);
+  const updateChannel = useUpdateChannel(venueId!);
   const [showCreate, setShowCreate] = useState(false);
   const [editing, setEditing] = useState<Channel | null>(null);
   const [syncControllerId, setSyncControllerId] = useState('');
@@ -57,7 +59,6 @@ export function ChannelsPage() {
   const [displayName, setDisplayName] = useState('');
   const [channelNumber, setChannelNumber] = useState('');
   const [platformChannelId, setPlatformChannelId] = useState('');
-  const [venueId, setVenueId] = useState('');
 
   const handleCreate = async (e: FormEvent) => {
     e.preventDefault();
@@ -65,7 +66,7 @@ export function ChannelsPage() {
       displayName,
       channelNumber,
       platformChannelId: platformChannelId || channelNumber,
-      venueId: venueId || venues?.[0]?.id || '',
+      venueId: venueId!,
     });
     setShowCreate(false);
     setDisplayName('');
@@ -167,16 +168,6 @@ export function ChannelsPage() {
                 <label>Platform Channel ID (optional)</label>
                 <input value={platformChannelId} onChange={(e) => setPlatformChannelId(e.target.value)} />
               </div>
-              {venues && venues.length > 0 && (
-                <div className="form-group">
-                  <label>Venue</label>
-                  <select value={venueId || venues[0]?.id} onChange={(e) => setVenueId(e.target.value)}>
-                    {venues.map((v) => (
-                      <option key={v.id} value={v.id}>{v.name}</option>
-                    ))}
-                  </select>
-                </div>
-              )}
               <div className="modal-actions">
                 <button type="button" className="btn-ghost" onClick={() => setShowCreate(false)}>Cancel</button>
                 <button type="submit" className="btn-primary" disabled={createChannel.isPending}>

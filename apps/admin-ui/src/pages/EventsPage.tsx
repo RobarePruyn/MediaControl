@@ -1,26 +1,28 @@
 /**
  * Events management page.
  * CRUD for venue events that drive token rotation.
+ * Venue ID is derived from the URL route parameter.
  * @module admin-ui/pages/EventsPage
  */
 
 import { useState, useEffect, type FormEvent } from 'react';
-import { useEvents, useCreateEvent, useUpdateEvent, useDeleteEvent, useVenues } from '../api/hooks.js';
+import { useParams } from 'react-router-dom';
+import { useEvents, useCreateEvent, useUpdateEvent, useDeleteEvent } from '../api/hooks.js';
 import { Plus, Pencil, Trash2 } from 'lucide-react';
 import type { Event as VenueEvent } from '@suitecommand/types';
 import './pages.css';
 
 export function EventsPage() {
-  const { data: events, isLoading } = useEvents();
-  const { data: venues } = useVenues();
-  const createEvent = useCreateEvent();
-  const updateEvent = useUpdateEvent();
-  const deleteEvent = useDeleteEvent();
+  const { venueId } = useParams<{ venueId: string }>();
+
+  const { data: events, isLoading } = useEvents(venueId!);
+  const createEvent = useCreateEvent(venueId!);
+  const updateEvent = useUpdateEvent(venueId!);
+  const deleteEvent = useDeleteEvent(venueId!);
   const [showCreate, setShowCreate] = useState(false);
   const [editing, setEditing] = useState<VenueEvent | null>(null);
 
   const [name, setName] = useState('');
-  const [venueId, setVenueId] = useState('');
   const [startsAt, setStartsAt] = useState('');
   const [endsAt, setEndsAt] = useState('');
   const [preAccessMinutes, setPreAccessMinutes] = useState(60);
@@ -46,7 +48,7 @@ export function EventsPage() {
     e.preventDefault();
     await createEvent.mutateAsync({
       name,
-      venueId: venueId || venues?.[0]?.id || '',
+      venueId: venueId!,
       startsAt: new Date(startsAt).toISOString(),
       endsAt: new Date(endsAt).toISOString(),
       preAccessMinutes,
@@ -75,9 +77,11 @@ export function EventsPage() {
     <div className="page">
       <div className="page-header">
         <h2 className="page-title">Events</h2>
-        <button className="btn-primary" onClick={() => setShowCreate(true)}>
-          <Plus size={16} /> Add Event
-        </button>
+        <div className="page-actions">
+          <button className="btn-primary" onClick={() => setShowCreate(true)}>
+            <Plus size={16} /> Add Event
+          </button>
+        </div>
       </div>
 
       {isLoading ? (
@@ -131,16 +135,6 @@ export function EventsPage() {
                 <label>Name</label>
                 <input value={name} onChange={(e) => setName(e.target.value)} required autoFocus />
               </div>
-              {venues && venues.length > 0 && (
-                <div className="form-group">
-                  <label>Venue</label>
-                  <select value={venueId || venues[0]?.id} onChange={(e) => setVenueId(e.target.value)}>
-                    {venues.map((v) => (
-                      <option key={v.id} value={v.id}>{v.name}</option>
-                    ))}
-                  </select>
-                </div>
-              )}
               <div className="form-group">
                 <label>Starts At</label>
                 <input type="datetime-local" value={startsAt} onChange={(e) => setStartsAt(e.target.value)} required />

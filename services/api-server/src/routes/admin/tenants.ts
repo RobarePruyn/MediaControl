@@ -26,14 +26,14 @@ const updateSchema = z.object({
 });
 
 /**
- * Create tenant admin routes. All routes require meta_admin role.
+ * Create tenant admin routes. All routes require super_admin role.
  * @param db - Database client
  */
 export function createTenantRoutes(db: Database): RouterType {
   const router: RouterType = Router();
 
-  // All tenant routes require meta_admin
-  router.use(requireRole('meta_admin'));
+  // All tenant routes require super_admin
+  router.use(requireRole('super_admin'));
 
   /** GET /api/admin/tenants — List all tenants */
   router.get('/', async (_req: Request, res: Response) => {

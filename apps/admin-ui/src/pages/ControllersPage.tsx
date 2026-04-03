@@ -1,10 +1,12 @@
 /**
  * Controllers management page.
  * Lists, creates, tests, and polls device controllers.
+ * Venue ID is derived from the URL route parameter.
  * @module admin-ui/pages/ControllersPage
  */
 
 import { useState, useEffect, type FormEvent } from 'react';
+import { useParams } from 'react-router-dom';
 import {
   useControllers,
   useCreateController,
@@ -12,30 +14,29 @@ import {
   useDeleteController,
   useTestController,
   usePollController,
-  useVenues,
 } from '../api/hooks.js';
 import { Plus, Pencil, Plug, RefreshCw, Trash2 } from 'lucide-react';
 import type { Controller } from '@suitecommand/types';
 import './pages.css';
 
 export function ControllersPage() {
-  const { data: controllers, isLoading } = useControllers();
-  const { data: venues } = useVenues();
-  const createController = useCreateController();
-  const deleteController = useDeleteController();
-  const testController = useTestController();
-  const pollController = usePollController();
+  const { venueId } = useParams<{ venueId: string }>();
+
+  const { data: controllers, isLoading } = useControllers(venueId!);
+  const createController = useCreateController(venueId!);
+  const deleteController = useDeleteController(venueId!);
+  const testController = useTestController(venueId!);
+  const pollController = usePollController(venueId!);
   const [showCreate, setShowCreate] = useState(false);
   const [testResult, setTestResult] = useState<Record<string, string>>({});
 
   const [name, setName] = useState('');
   const [platformSlug, setPlatformSlug] = useState('visionedge');
-  const [venueId, setVenueId] = useState('');
   const [baseUrl, setBaseUrl] = useState('');
   const [apiKey, setApiKey] = useState('');
 
   const [editing, setEditing] = useState<Controller | null>(null);
-  const updateController = useUpdateController(editing?.id ?? '');
+  const updateController = useUpdateController(venueId!, editing?.id ?? '');
   const [editName, setEditName] = useState('');
   const [editBaseUrl, setEditBaseUrl] = useState('');
   const [editApiKey, setEditApiKey] = useState('');
@@ -55,7 +56,7 @@ export function ControllersPage() {
     await createController.mutateAsync({
       name,
       platformSlug,
-      venueId: venueId || venues?.[0]?.id || '',
+      venueId: venueId!,
       connectionConfig: { platform: platformSlug, baseUrl, apiKey },
     });
     setShowCreate(false);
@@ -93,9 +94,11 @@ export function ControllersPage() {
     <div className="page">
       <div className="page-header">
         <h2 className="page-title">Controllers</h2>
-        <button className="btn-primary" onClick={() => setShowCreate(true)}>
-          <Plus size={16} /> Add Controller
-        </button>
+        <div className="page-actions">
+          <button className="btn-primary" onClick={() => setShowCreate(true)}>
+            <Plus size={16} /> Add Controller
+          </button>
+        </div>
       </div>
 
       {isLoading ? (
@@ -214,16 +217,6 @@ export function ControllersPage() {
                   <option value="visionedge">WiPro VisionEdge</option>
                 </select>
               </div>
-              {venues && venues.length > 0 && (
-                <div className="form-group">
-                  <label>Venue</label>
-                  <select value={venueId || venues[0]?.id} onChange={(e) => setVenueId(e.target.value)}>
-                    {venues.map((v) => (
-                      <option key={v.id} value={v.id}>{v.name}</option>
-                    ))}
-                  </select>
-                </div>
-              )}
               <div className="form-group">
                 <label>Base URL</label>
                 <input value={baseUrl} onChange={(e) => setBaseUrl(e.target.value)} required placeholder="http://192.168.1.100:8080" />

@@ -1,10 +1,12 @@
 /**
  * Groups management page.
  * CRUD for suites/rooms/zones with access token management.
+ * Venue ID is derived from the URL route parameter.
  * @module admin-ui/pages/GroupsPage
  */
 
 import { useState, useEffect, type FormEvent } from 'react';
+import { useParams } from 'react-router-dom';
 import {
   useGroups,
   useCreateGroup,
@@ -14,22 +16,22 @@ import {
   useCreateGroupToken,
   useRotateGroupToken,
   useRevokeGroupToken,
-  useVenues,
 } from '../api/hooks.js';
 import { Plus, Pencil, Key, Trash2, RefreshCw, Copy } from 'lucide-react';
 import type { AccessTier, Group, GroupAccessToken } from '@suitecommand/types';
 import './pages.css';
 
 export function GroupsPage() {
-  const { data: groups, isLoading } = useGroups();
-  const { data: venues } = useVenues();
-  const createGroup = useCreateGroup();
-  const deleteGroup = useDeleteGroup();
+  const { venueId } = useParams<{ venueId: string }>();
+
+  const { data: groups, isLoading } = useGroups(venueId!);
+  const createGroup = useCreateGroup(venueId!);
+  const deleteGroup = useDeleteGroup(venueId!);
   const [showCreate, setShowCreate] = useState(false);
   const [editing, setEditing] = useState<Group | null>(null);
   const [tokenGroupId, setTokenGroupId] = useState<string | null>(null);
 
-  const updateGroup = useUpdateGroup(editing?.id ?? '');
+  const updateGroup = useUpdateGroup(venueId!, editing?.id ?? '');
 
   const [editName, setEditName] = useState('');
   const [editType, setEditType] = useState<'suite' | 'room' | 'zone' | 'boh'>('suite');
@@ -55,7 +57,6 @@ export function GroupsPage() {
 
   const [name, setName] = useState('');
   const [type, setType] = useState<'suite' | 'room' | 'zone' | 'boh'>('suite');
-  const [venueId, setVenueId] = useState('');
   const [description, setDescription] = useState('');
 
   const handleCreate = async (e: FormEvent) => {
@@ -63,7 +64,7 @@ export function GroupsPage() {
     await createGroup.mutateAsync({
       name,
       type,
-      venueId: venueId || venues?.[0]?.id || '',
+      venueId: venueId!,
       description: description || undefined,
     });
     setShowCreate(false);
@@ -75,9 +76,11 @@ export function GroupsPage() {
     <div className="page">
       <div className="page-header">
         <h2 className="page-title">Groups</h2>
-        <button className="btn-primary" onClick={() => setShowCreate(true)}>
-          <Plus size={16} /> Add Group
-        </button>
+        <div className="page-actions">
+          <button className="btn-primary" onClick={() => setShowCreate(true)}>
+            <Plus size={16} /> Add Group
+          </button>
+        </div>
       </div>
 
       {isLoading ? (
@@ -139,16 +142,6 @@ export function GroupsPage() {
                   <option value="boh">Back of House</option>
                 </select>
               </div>
-              {venues && venues.length > 0 && (
-                <div className="form-group">
-                  <label>Venue</label>
-                  <select value={venueId || venues[0]?.id} onChange={(e) => setVenueId(e.target.value)}>
-                    {venues.map((v) => (
-                      <option key={v.id} value={v.id}>{v.name}</option>
-                    ))}
-                  </select>
-                </div>
-              )}
               <div className="form-group">
                 <label>Description (optional)</label>
                 <textarea value={description} onChange={(e) => setDescription(e.target.value)} rows={2} />
@@ -198,17 +191,17 @@ export function GroupsPage() {
       )}
 
       {tokenGroupId && (
-        <TokenModal groupId={tokenGroupId} onClose={() => setTokenGroupId(null)} />
+        <TokenModal venueId={venueId!} groupId={tokenGroupId} onClose={() => setTokenGroupId(null)} />
       )}
     </div>
   );
 }
 
-function TokenModal({ groupId, onClose }: { groupId: string; onClose: () => void }) {
-  const { data: tokens, isLoading } = useGroupTokens(groupId);
-  const createToken = useCreateGroupToken();
-  const rotateToken = useRotateGroupToken();
-  const revokeToken = useRevokeGroupToken();
+function TokenModal({ venueId, groupId, onClose }: { venueId: string; groupId: string; onClose: () => void }) {
+  const { data: tokens, isLoading } = useGroupTokens(venueId, groupId);
+  const createToken = useCreateGroupToken(venueId);
+  const rotateToken = useRotateGroupToken(venueId);
+  const revokeToken = useRevokeGroupToken(venueId);
   const [tier, setTier] = useState<AccessTier>('event');
 
   const handleCreate = async () => {

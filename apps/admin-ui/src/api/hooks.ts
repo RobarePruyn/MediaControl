@@ -19,6 +19,7 @@ import type {
   TriggerExecution,
   IdentityProvider,
   SsoConfig,
+  UserWithVenues,
 } from '@suitecommand/types';
 import type {
   TlsCertificateStatus,
@@ -44,6 +45,9 @@ import type {
   UpsertSsoConfigRequest,
   GenerateCsrRequest,
   BulkAssignEndpointsRequest,
+  CreateUserRequest,
+  UpdateUserRequest,
+  AssignVenuesRequest,
 } from '@suitecommand/types';
 
 // ─── Venues ───────────────────────────────────────────────────────────
@@ -71,306 +75,385 @@ export function useUpdateVenue() {
 
 // ─── Controllers ──────────────────────────────────────────────────────
 
-export function useControllers() {
-  return useQuery({ queryKey: ['controllers'], queryFn: () => apiGet<Controller[]>('/admin/controllers') });
-}
-
-export function useController(id: string) {
-  return useQuery({ queryKey: ['controllers', id], queryFn: () => apiGet<Controller>(`/admin/controllers/${id}`) });
-}
-
-export function useCreateController() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: (body: CreateControllerRequest) => apiPost<Controller>('/admin/controllers', body),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['controllers'] }),
+export function useControllers(venueId: string) {
+  return useQuery({
+    queryKey: ['venues', venueId, 'controllers'],
+    queryFn: () => apiGet<Controller[]>(`/admin/venues/${venueId}/controllers`),
+    enabled: !!venueId,
   });
 }
 
-export function useUpdateController(id: string) {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: (body: UpdateControllerRequest) => apiPatch<Controller>(`/admin/controllers/${id}`, body),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['controllers'] }),
+export function useController(venueId: string, id: string) {
+  return useQuery({
+    queryKey: ['venues', venueId, 'controllers', id],
+    queryFn: () => apiGet<Controller>(`/admin/venues/${venueId}/controllers/${id}`),
+    enabled: !!venueId,
   });
 }
 
-export function useDeleteController() {
+export function useCreateController(venueId: string) {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (id: string) => apiDelete(`/admin/controllers/${id}`),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['controllers'] }),
+    mutationFn: (body: CreateControllerRequest) => apiPost<Controller>(`/admin/venues/${venueId}/controllers`, body),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['venues', venueId, 'controllers'] }),
   });
 }
 
-export function useTestController() {
+export function useUpdateController(venueId: string, id: string) {
+  const qc = useQueryClient();
   return useMutation({
-    mutationFn: (id: string) => apiPost(`/admin/controllers/${id}/test`),
+    mutationFn: (body: UpdateControllerRequest) => apiPatch<Controller>(`/admin/venues/${venueId}/controllers/${id}`, body),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['venues', venueId, 'controllers'] }),
   });
 }
 
-export function usePollController() {
+export function useDeleteController(venueId: string) {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (id: string) => apiPost(`/admin/controllers/${id}/poll`),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['endpoints'] }),
+    mutationFn: (id: string) => apiDelete(`/admin/venues/${venueId}/controllers/${id}`),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['venues', venueId, 'controllers'] }),
+  });
+}
+
+export function useTestController(venueId: string) {
+  return useMutation({
+    mutationFn: (id: string) => apiPost(`/admin/venues/${venueId}/controllers/${id}/test`),
+  });
+}
+
+export function usePollController(venueId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => apiPost(`/admin/venues/${venueId}/controllers/${id}/poll`),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['venues', venueId, 'endpoints'] }),
   });
 }
 
 // ─── Endpoints ────────────────────────────────────────────────────────
 
-export function useEndpoints(params?: { controllerId?: string; assigned?: string }) {
+export function useEndpoints(venueId: string, params?: { controllerId?: string; assigned?: string }) {
   const search = new URLSearchParams();
   if (params?.controllerId) search.set('controllerId', params.controllerId);
   if (params?.assigned) search.set('assigned', params.assigned);
   const qs = search.toString();
   return useQuery({
-    queryKey: ['endpoints', params],
-    queryFn: () => apiGet<Endpoint[]>(`/admin/endpoints${qs ? `?${qs}` : ''}`),
+    queryKey: ['venues', venueId, 'endpoints', params],
+    queryFn: () => apiGet<Endpoint[]>(`/admin/venues/${venueId}/endpoints${qs ? `?${qs}` : ''}`),
+    enabled: !!venueId,
   });
 }
 
-export function useUpdateEndpoint() {
+export function useUpdateEndpoint(venueId: string) {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: ({ id, ...body }: { id: string; displayName?: string; groupId?: string | null }) =>
-      apiPatch<Endpoint>(`/admin/endpoints/${id}`, body),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['endpoints'] }),
+      apiPatch<Endpoint>(`/admin/venues/${venueId}/endpoints/${id}`, body),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['venues', venueId, 'endpoints'] }),
   });
 }
 
-export function useBulkAssignEndpoints() {
+export function useBulkAssignEndpoints(venueId: string) {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (body: BulkAssignEndpointsRequest) => apiPost('/admin/endpoints/bulk-assign', body),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['endpoints'] }),
+    mutationFn: (body: BulkAssignEndpointsRequest) => apiPost(`/admin/venues/${venueId}/endpoints/bulk-assign`, body),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['venues', venueId, 'endpoints'] }),
   });
 }
 
 // ─── Groups ───────────────────────────────────────────────────────────
 
-export function useGroups() {
-  return useQuery({ queryKey: ['groups'], queryFn: () => apiGet<Group[]>('/admin/groups') });
-}
-
-export function useGroup(id: string) {
-  return useQuery({ queryKey: ['groups', id], queryFn: () => apiGet<Group>(`/admin/groups/${id}`) });
-}
-
-export function useCreateGroup() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: (body: CreateGroupRequest) => apiPost<Group>('/admin/groups', body),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['groups'] }),
-  });
-}
-
-export function useUpdateGroup(id: string) {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: (body: UpdateGroupRequest) => apiPatch<Group>(`/admin/groups/${id}`, body),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['groups'] }),
-  });
-}
-
-export function useDeleteGroup() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: (id: string) => apiDelete(`/admin/groups/${id}`),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['groups'] }),
-  });
-}
-
-export function useGroupTokens(groupId: string) {
+export function useGroups(venueId: string) {
   return useQuery({
-    queryKey: ['groups', groupId, 'tokens'],
-    queryFn: () => apiGet<GroupAccessToken[]>(`/admin/groups/${groupId}/tokens`),
+    queryKey: ['venues', venueId, 'groups'],
+    queryFn: () => apiGet<Group[]>(`/admin/venues/${venueId}/groups`),
+    enabled: !!venueId,
   });
 }
 
-export function useCreateGroupToken() {
+export function useGroup(venueId: string, id: string) {
+  return useQuery({
+    queryKey: ['venues', venueId, 'groups', id],
+    queryFn: () => apiGet<Group>(`/admin/venues/${venueId}/groups/${id}`),
+    enabled: !!venueId,
+  });
+}
+
+export function useCreateGroup(venueId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: CreateGroupRequest) => apiPost<Group>(`/admin/venues/${venueId}/groups`, body),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['venues', venueId, 'groups'] }),
+  });
+}
+
+export function useUpdateGroup(venueId: string, id: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: UpdateGroupRequest) => apiPatch<Group>(`/admin/venues/${venueId}/groups/${id}`, body),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['venues', venueId, 'groups'] }),
+  });
+}
+
+export function useDeleteGroup(venueId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => apiDelete(`/admin/venues/${venueId}/groups/${id}`),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['venues', venueId, 'groups'] }),
+  });
+}
+
+export function useGroupTokens(venueId: string, groupId: string) {
+  return useQuery({
+    queryKey: ['venues', venueId, 'groups', groupId, 'tokens'],
+    queryFn: () => apiGet<GroupAccessToken[]>(`/admin/venues/${venueId}/groups/${groupId}/tokens`),
+    enabled: !!venueId,
+  });
+}
+
+export function useCreateGroupToken(venueId: string) {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (body: CreateGroupAccessTokenRequest) =>
-      apiPost<GroupAccessToken>(`/admin/groups/${body.groupId}/tokens`, body),
-    onSuccess: (_d, vars) => qc.invalidateQueries({ queryKey: ['groups', vars.groupId, 'tokens'] }),
+      apiPost<GroupAccessToken>(`/admin/venues/${venueId}/groups/${body.groupId}/tokens`, body),
+    onSuccess: (_d, vars) => qc.invalidateQueries({ queryKey: ['venues', venueId, 'groups', vars.groupId, 'tokens'] }),
   });
 }
 
-export function useRotateGroupToken() {
+export function useRotateGroupToken(venueId: string) {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: ({ groupId, tokenId }: { groupId: string; tokenId: string }) =>
-      apiPost<GroupAccessToken>(`/admin/groups/${groupId}/tokens/${tokenId}/rotate`),
-    onSuccess: (_d, vars) => qc.invalidateQueries({ queryKey: ['groups', vars.groupId, 'tokens'] }),
+      apiPost<GroupAccessToken>(`/admin/venues/${venueId}/groups/${groupId}/tokens/${tokenId}/rotate`),
+    onSuccess: (_d, vars) => qc.invalidateQueries({ queryKey: ['venues', venueId, 'groups', vars.groupId, 'tokens'] }),
   });
 }
 
-export function useRevokeGroupToken() {
+export function useRevokeGroupToken(venueId: string) {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: ({ groupId, tokenId }: { groupId: string; tokenId: string }) =>
-      apiDelete(`/admin/groups/${groupId}/tokens/${tokenId}`),
-    onSuccess: (_d, vars) => qc.invalidateQueries({ queryKey: ['groups', vars.groupId, 'tokens'] }),
+      apiDelete(`/admin/venues/${venueId}/groups/${groupId}/tokens/${tokenId}`),
+    onSuccess: (_d, vars) => qc.invalidateQueries({ queryKey: ['venues', venueId, 'groups', vars.groupId, 'tokens'] }),
   });
 }
 
 // ─── Channels ─────────────────────────────────────────────────────────
 
-export function useChannels() {
-  return useQuery({ queryKey: ['channels'], queryFn: () => apiGet<Channel[]>('/admin/channels') });
-}
-
-export function useCreateChannel() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: (body: CreateChannelRequest) => apiPost<Channel>('/admin/channels', body),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['channels'] }),
+export function useChannels(venueId: string) {
+  return useQuery({
+    queryKey: ['venues', venueId, 'channels'],
+    queryFn: () => apiGet<Channel[]>(`/admin/venues/${venueId}/channels`),
+    enabled: !!venueId,
   });
 }
 
-export function useUpdateChannel() {
+export function useCreateChannel(venueId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: CreateChannelRequest) => apiPost<Channel>(`/admin/venues/${venueId}/channels`, body),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['venues', venueId, 'channels'] }),
+  });
+}
+
+export function useUpdateChannel(venueId: string) {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: ({ id, ...body }: UpdateChannelRequest & { id: string }) =>
-      apiPatch<Channel>(`/admin/channels/${id}`, body),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['channels'] }),
+      apiPatch<Channel>(`/admin/venues/${venueId}/channels/${id}`, body),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['venues', venueId, 'channels'] }),
   });
 }
 
-export function useSyncChannels() {
+export function useSyncChannels(venueId: string) {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (controllerId: string) => apiPost('/admin/channels/sync', { controllerId }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['channels'] }),
+    mutationFn: (controllerId: string) => apiPost(`/admin/venues/${venueId}/channels/sync`, { controllerId }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['venues', venueId, 'channels'] }),
   });
 }
 
-export function useReorderChannels() {
+export function useReorderChannels(venueId: string) {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (body: ReorderChannelsRequest) => apiPatch('/admin/channels/reorder', body),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['channels'] }),
+    mutationFn: (body: ReorderChannelsRequest) => apiPatch(`/admin/venues/${venueId}/channels/reorder`, body),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['venues', venueId, 'channels'] }),
   });
 }
 
 // ─── Branding ─────────────────────────────────────────────────────────
 
-export function useBranding() {
-  return useQuery({ queryKey: ['branding'], queryFn: () => apiGet<BrandingConfig>('/admin/branding') });
+export function useBranding(venueId: string) {
+  return useQuery({
+    queryKey: ['venues', venueId, 'branding'],
+    queryFn: () => apiGet<BrandingConfig>(`/admin/venues/${venueId}/branding`),
+    enabled: !!venueId,
+  });
 }
 
-export function useUpdateBranding() {
+export function useUpdateBranding(venueId: string) {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (body: UpdateBrandingRequest) => apiPut<BrandingConfig>('/admin/branding', body),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['branding'] }),
+    mutationFn: (body: UpdateBrandingRequest) => apiPut<BrandingConfig>(`/admin/venues/${venueId}/branding`, body),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['venues', venueId, 'branding'] }),
   });
 }
 
 // ─── Events ───────────────────────────────────────────────────────────
 
-export function useEvents() {
-  return useQuery({ queryKey: ['events'], queryFn: () => apiGet<Event[]>('/admin/events') });
-}
-
-export function useCreateEvent() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: (body: CreateEventRequest) => apiPost<Event>('/admin/events', body),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['events'] }),
+export function useEvents(venueId: string) {
+  return useQuery({
+    queryKey: ['venues', venueId, 'events'],
+    queryFn: () => apiGet<Event[]>(`/admin/venues/${venueId}/events`),
+    enabled: !!venueId,
   });
 }
 
-export function useUpdateEvent() {
+export function useCreateEvent(venueId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: CreateEventRequest) => apiPost<Event>(`/admin/venues/${venueId}/events`, body),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['venues', venueId, 'events'] }),
+  });
+}
+
+export function useUpdateEvent(venueId: string) {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: ({ id, ...body }: UpdateEventRequest & { id: string }) =>
-      apiPatch<Event>(`/admin/events/${id}`, body),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['events'] }),
+      apiPatch<Event>(`/admin/venues/${venueId}/events/${id}`, body),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['venues', venueId, 'events'] }),
   });
 }
 
-export function useDeleteEvent() {
+export function useDeleteEvent(venueId: string) {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (id: string) => apiDelete(`/admin/events/${id}`),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['events'] }),
+    mutationFn: (id: string) => apiDelete(`/admin/venues/${venueId}/events/${id}`),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['venues', venueId, 'events'] }),
   });
 }
 
 // ─── Triggers ─────────────────────────────────────────────────────────
 
-export function useTriggers() {
-  return useQuery({ queryKey: ['triggers'], queryFn: () => apiGet<Trigger[]>('/admin/triggers') });
-}
-
-export function useTrigger(id: string) {
-  return useQuery({ queryKey: ['triggers', id], queryFn: () => apiGet<Trigger>(`/admin/triggers/${id}`) });
-}
-
-export function useCreateTrigger() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: (body: CreateTriggerRequest) => apiPost<Trigger>('/admin/triggers', body),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['triggers'] }),
+export function useTriggers(venueId: string) {
+  return useQuery({
+    queryKey: ['venues', venueId, 'triggers'],
+    queryFn: () => apiGet<Trigger[]>(`/admin/venues/${venueId}/triggers`),
+    enabled: !!venueId,
   });
 }
 
-export function useUpdateTrigger() {
+export function useTrigger(venueId: string, id: string) {
+  return useQuery({
+    queryKey: ['venues', venueId, 'triggers', id],
+    queryFn: () => apiGet<Trigger>(`/admin/venues/${venueId}/triggers/${id}`),
+    enabled: !!venueId,
+  });
+}
+
+export function useCreateTrigger(venueId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: CreateTriggerRequest) => apiPost<Trigger>(`/admin/venues/${venueId}/triggers`, body),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['venues', venueId, 'triggers'] }),
+  });
+}
+
+export function useUpdateTrigger(venueId: string) {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: ({ id, ...body }: UpdateTriggerRequest & { id: string }) =>
-      apiPatch<Trigger>(`/admin/triggers/${id}`, body),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['triggers'] }),
+      apiPatch<Trigger>(`/admin/venues/${venueId}/triggers/${id}`, body),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['venues', venueId, 'triggers'] }),
   });
 }
 
-export function useDeleteTrigger() {
+export function useDeleteTrigger(venueId: string) {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (id: string) => apiDelete(`/admin/triggers/${id}`),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['triggers'] }),
+    mutationFn: (id: string) => apiDelete(`/admin/venues/${venueId}/triggers/${id}`),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['venues', venueId, 'triggers'] }),
   });
 }
 
-export function useSetTriggerActions(triggerId: string) {
+export function useSetTriggerActions(venueId: string, triggerId: string) {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (body: SetTriggerActionsRequest) =>
-      apiPut(`/admin/triggers/${triggerId}/actions`, body),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['triggers', triggerId] }),
+      apiPut(`/admin/venues/${venueId}/triggers/${triggerId}/actions`, body),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['venues', venueId, 'triggers', triggerId] }),
   });
 }
 
-export function useSetTriggerTargets(triggerId: string) {
+export function useSetTriggerTargets(venueId: string, triggerId: string) {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (body: SetTriggerTargetsRequest) =>
-      apiPut(`/admin/triggers/${triggerId}/targets`, body),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['triggers', triggerId] }),
+      apiPut(`/admin/venues/${venueId}/triggers/${triggerId}/targets`, body),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['venues', venueId, 'triggers', triggerId] }),
   });
 }
 
-export function useExecuteTrigger() {
+export function useExecuteTrigger(venueId: string) {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (id: string) => apiPost<{ executionId: string }>(`/admin/triggers/${id}/execute`),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['trigger-executions'] }),
+    mutationFn: (id: string) => apiPost<{ executionId: string }>(`/admin/venues/${venueId}/triggers/${id}/execute`),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['venues', venueId, 'trigger-executions'] }),
   });
 }
 
-export function useCancelExecution() {
+export function useCancelExecution(venueId: string) {
   return useMutation({
     mutationFn: ({ triggerId, executionId }: { triggerId: string; executionId: string }) =>
-      apiPost(`/admin/triggers/${triggerId}/executions/${executionId}/cancel`),
+      apiPost(`/admin/venues/${venueId}/triggers/${triggerId}/executions/${executionId}/cancel`),
   });
 }
 
-export function useTriggerExecutions(triggerId: string) {
+export function useTriggerExecutions(venueId: string, triggerId: string) {
   return useQuery({
-    queryKey: ['trigger-executions', triggerId],
-    queryFn: () => apiGet<TriggerExecution[]>(`/admin/triggers/${triggerId}/executions`),
+    queryKey: ['venues', venueId, 'trigger-executions', triggerId],
+    queryFn: () => apiGet<TriggerExecution[]>(`/admin/venues/${venueId}/triggers/${triggerId}/executions`),
+    enabled: !!venueId,
+  });
+}
+
+// ─── Users ───────────────────────────────────────────────────────────
+
+export function useUsers() {
+  return useQuery({ queryKey: ['users'], queryFn: () => apiGet<UserWithVenues[]>('/admin/users') });
+}
+
+export function useCreateUser() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: CreateUserRequest) => apiPost<UserWithVenues>('/admin/users', body),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['users'] }),
+  });
+}
+
+export function useUpdateUser() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, ...body }: UpdateUserRequest & { id: string }) =>
+      apiPatch<UserWithVenues>(`/admin/users/${id}`, body),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['users'] }),
+  });
+}
+
+export function useDeleteUser() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => apiDelete(`/admin/users/${id}`),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['users'] }),
+  });
+}
+
+export function useAssignUserVenues() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ userId, venueIds }: { userId: string; venueIds: string[] }) =>
+      apiPut(`/admin/users/${userId}/venues`, { venueIds } as AssignVenuesRequest),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['users'] }),
   });
 }
 
