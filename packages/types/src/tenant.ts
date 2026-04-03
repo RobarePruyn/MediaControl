@@ -186,6 +186,7 @@ export interface Channel {
   logoUrl: string | null;
   channelNumber: string;
   category: string | null;
+  source: 'synced' | 'manual';
   isActive: boolean;
   displayOrder: number;
 }

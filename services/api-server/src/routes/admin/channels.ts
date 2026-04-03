@@ -69,7 +69,7 @@ export function createChannelRoutes(
     const { venueId } = req as VenueScopedRequest;
     const body = createSchema.parse(req.body);
 
-    const [created] = await db.insert(channels).values({ ...body, venueId }).returning();
+    const [created] = await db.insert(channels).values({ ...body, venueId, source: 'manual' }).returning();
     res.status(201).json({ success: true, data: created });
   });
 
@@ -99,26 +99,45 @@ export function createChannelRoutes(
       { platform: controller.platformSlug, ...config },
     );
 
-    // Upsert discovered channels
+    // Upsert discovered channels — match on (venueId, platformChannelId)
     let order = 0;
-    const created = [];
+    let createdCount = 0;
+    let updatedCount = 0;
     for (const ch of discovered) {
-      const [upserted] = await db
-        .insert(channels)
-        .values({
+      const [existing] = await db
+        .select({ id: channels.id })
+        .from(channels)
+        .where(
+          and(
+            eq(channels.venueId, venueId),
+            eq(channels.platformChannelId, ch.channelNumber),
+          ),
+        );
+
+      if (existing) {
+        await db
+          .update(channels)
+          .set({
+            displayName: ch.displayName,
+            channelNumber: ch.channelNumber,
+            source: 'synced',
+          })
+          .where(eq(channels.id, existing.id));
+        updatedCount++;
+      } else {
+        await db.insert(channels).values({
           venueId,
           platformChannelId: ch.channelNumber,
           displayName: ch.displayName,
           channelNumber: ch.channelNumber,
+          source: 'synced',
           displayOrder: order++,
-        })
-        .onConflictDoNothing()
-        .returning();
-
-      if (upserted) created.push(upserted);
+        });
+        createdCount++;
+      }
     }
 
-    res.json({ success: true, data: { synced: discovered.length, created: created.length } });
+    res.json({ success: true, data: { synced: discovered.length, created: createdCount, updated: updatedCount } });
   });
 
   /** PATCH /:id — Update channel */

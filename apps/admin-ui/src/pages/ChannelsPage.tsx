@@ -116,6 +116,7 @@ export function ChannelsPage() {
                 <th>#</th>
                 <th>Name</th>
                 <th>Category</th>
+                <th>Source</th>
                 <th>Status</th>
                 <th>Logo</th>
                 <th>Actions</th>
@@ -127,6 +128,11 @@ export function ChannelsPage() {
                   <td>{ch.channelNumber}</td>
                   <td>{ch.displayName}</td>
                   <td>{ch.category || '—'}</td>
+                  <td>
+                    <span className={`badge ${ch.source === 'synced' ? 'badge-info' : 'badge-warning'}`}>
+                      {ch.source ?? 'manual'}
+                    </span>
+                  </td>
                   <td>
                     {ch.isActive ? (
                       <span className="badge badge-success">active</span>

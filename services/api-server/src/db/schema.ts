@@ -14,6 +14,7 @@ import {
   pgTable,
   text,
   timestamp,
+  uniqueIndex,
   uuid,
   varchar,
 } from 'drizzle-orm/pg-core';
@@ -203,11 +204,13 @@ export const channels = pgTable('channels', {
   logoUrl: text('logo_url'),
   channelNumber: varchar('channel_number', { length: 20 }).notNull(),
   category: varchar('category', { length: 100 }),
+  source: varchar('source', { length: 20 }).notNull().default('manual'),
   isActive: boolean('is_active').notNull().default(true),
   displayOrder: integer('display_order').notNull().default(0),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 }, (table) => [
   index('channels_venue_id_idx').on(table.venueId),
+  uniqueIndex('channels_venue_platform_id_uniq').on(table.venueId, table.platformChannelId),
 ]);
 
 // ─── Group Channel Lists (Optional Per-Group Channel Overrides) ──────
