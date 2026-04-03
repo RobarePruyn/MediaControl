@@ -36,7 +36,8 @@ RUN pnpm --filter @suitecommand/bridge-agent build
 # ---------------------------------------------------------------------------
 FROM node:20-alpine AS runtime
 
-RUN corepack enable && corepack prepare pnpm@9.15.4 --activate
+RUN apk add --no-cache python3 make g++ && \
+    corepack enable && corepack prepare pnpm@9.15.4 --activate
 
 WORKDIR /app
 
@@ -50,8 +51,9 @@ COPY services/bridge-agent/package.json services/bridge-agent/
 COPY apps/admin-ui/package.json apps/admin-ui/
 COPY apps/control-ui/package.json apps/control-ui/
 
-# Install production dependencies only
-RUN pnpm install --frozen-lockfile --prod
+# Install production dependencies only (bcrypt requires native build tools)
+RUN pnpm install --frozen-lockfile --prod && \
+    apk del python3 make g++
 
 # Copy built artifacts from builder stage
 COPY --from=builder /app/packages/types/dist packages/types/dist
