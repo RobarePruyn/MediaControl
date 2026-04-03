@@ -22,6 +22,17 @@ import { StateCache } from './services/stateCache.js';
 import { QrService } from './services/qrService.js';
 import { startTokenRotationJob } from './services/tokenRotationJob.js';
 import { createAuthRoutes } from './routes/auth.js';
+import { createTenantRoutes } from './routes/admin/tenants.js';
+import { createVenueRoutes } from './routes/admin/venues.js';
+import { createControllerRoutes } from './routes/admin/controllers.js';
+import { createEndpointRoutes } from './routes/admin/endpoints.js';
+import { createGroupRoutes } from './routes/admin/groups.js';
+import { createChannelRoutes } from './routes/admin/channels.js';
+import { createBrandingRoutes } from './routes/admin/branding.js';
+import { createEventRoutes } from './routes/admin/events.js';
+import { createTlsRoutes } from './routes/admin/tls.js';
+import { createIdentityProviderRoutes } from './routes/admin/identityProviders.js';
+import { createTriggerRoutes } from './routes/admin/triggers.js';
 import { initWebSocketHub } from './websocket/index.js';
 
 // ─── Config ────────────────────────────────────────────────────────────
@@ -60,12 +71,23 @@ app.get('/api/health', (_req, res) => {
 });
 
 // ─── Protected Admin Routes ────────────────────────────────────────────
-// Admin routes require authentication and tenant scoping.
-// Individual route modules will be added in build step 5.
 
 const adminRouter = express.Router();
 adminRouter.use(requireAuth(config.JWT_ACCESS_SECRET));
 adminRouter.use(tenantScope);
+
+adminRouter.use('/tenants', createTenantRoutes(db));
+adminRouter.use('/venues', createVenueRoutes(db));
+adminRouter.use('/controllers', createControllerRoutes(db, bridgeClient, config.CREDENTIAL_ENCRYPTION_KEY));
+adminRouter.use('/endpoints', createEndpointRoutes(db));
+adminRouter.use('/groups', createGroupRoutes(db, qrService));
+adminRouter.use('/channels', createChannelRoutes(db, bridgeClient, config.CREDENTIAL_ENCRYPTION_KEY));
+adminRouter.use('/branding', createBrandingRoutes(db));
+adminRouter.use('/events', createEventRoutes(db));
+adminRouter.use('/tls', createTlsRoutes(db, config.QR_STORAGE_PATH.replace('qr-storage', 'tls-storage')));
+adminRouter.use('/identity-providers', createIdentityProviderRoutes(db, config.CREDENTIAL_ENCRYPTION_KEY));
+adminRouter.use('/triggers', createTriggerRoutes(db));
+
 app.use('/api/admin', adminRouter);
 
 // ─── Control Routes (Token-Gated, No Auth) ────────────────────────────
