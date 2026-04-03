@@ -1,0 +1,91 @@
+# SuiteCommand — Docker Compose overrides for local development
+# Mounts source code for hot reload, exposes debug ports, uses tsx watch.
+
+services:
+  # ---------------------------------------------------------------------------
+  # API Server — dev mode with tsx watch and source mounting
+  # ---------------------------------------------------------------------------
+  api-server:
+    build:
+      context: .
+      dockerfile: services/api-server/Dockerfile
+      target: builder
+    command: ["pnpm", "--filter", "@suitecommand/api-server", "dev"]
+    environment:
+      NODE_ENV: development
+    volumes:
+      - ./packages/types/src:/app/packages/types/src
+      - ./services/api-server/src:/app/services/api-server/src
+      - ./services/api-server/drizzle.config.ts:/app/services/api-server/drizzle.config.ts
+      - qr-storage:/app/qr-storage
+      - nginx-certs:/etc/nginx/certs
+    ports:
+      - "4000:4000"
+      - "9229:9229"  # Node.js debugger
+
+  # ---------------------------------------------------------------------------
+  # Bridge Agent — dev mode with tsx watch and source mounting
+  # ---------------------------------------------------------------------------
+  bridge-agent:
+    build:
+      context: .
+      dockerfile: services/bridge-agent/Dockerfile
+      target: builder
+    command: ["pnpm", "--filter", "@suitecommand/bridge-agent", "dev"]
+    environment:
+      NODE_ENV: development
+    volumes:
+      - ./packages/types/src:/app/packages/types/src
+      - ./services/bridge-agent/src:/app/services/bridge-agent/src
+    ports:
+      - "4001:4001"
+      - "9230:9229"  # Node.js debugger (different host port)
+
+  # ---------------------------------------------------------------------------
+  # Admin UI — Vite dev server with hot module replacement
+  # ---------------------------------------------------------------------------
+  admin-ui:
+    build:
+      context: .
+      dockerfile: apps/admin-ui/Dockerfile
+      target: builder
+    command: ["pnpm", "--filter", "@suitecommand/admin-ui", "dev", "--host", "0.0.0.0"]
+    volumes:
+      - ./packages/types/src:/app/packages/types/src
+      - ./apps/admin-ui/src:/app/apps/admin-ui/src
+      - ./apps/admin-ui/index.html:/app/apps/admin-ui/index.html
+      - ./apps/admin-ui/vite.config.ts:/app/apps/admin-ui/vite.config.ts
+      - ./apps/admin-ui/public:/app/apps/admin-ui/public
+    ports:
+      - "3001:3001"
+
+  # ---------------------------------------------------------------------------
+  # Control UI — Vite dev server with hot module replacement
+  # ---------------------------------------------------------------------------
+  control-ui:
+    build:
+      context: .
+      dockerfile: apps/control-ui/Dockerfile
+      target: builder
+    command: ["pnpm", "--filter", "@suitecommand/control-ui", "dev", "--host", "0.0.0.0"]
+    volumes:
+      - ./packages/types/src:/app/packages/types/src
+      - ./apps/control-ui/src:/app/apps/control-ui/src
+      - ./apps/control-ui/index.html:/app/apps/control-ui/index.html
+      - ./apps/control-ui/vite.config.ts:/app/apps/control-ui/vite.config.ts
+      - ./apps/control-ui/public:/app/apps/control-ui/public
+    ports:
+      - "3002:3002"
+
+  # ---------------------------------------------------------------------------
+  # Nginx — same as production, passes through
+  # ---------------------------------------------------------------------------
+  nginx:
+    depends_on:
+      - api-server
+      - admin-ui
+      - control-ui
+
+  # ---------------------------------------------------------------------------
+  # Postgres + Redis — expose ports for direct local access (already in base)
+  # ---------------------------------------------------------------------------

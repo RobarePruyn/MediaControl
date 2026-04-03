@@ -12,6 +12,7 @@
     "@suitecommand/types": "workspace:*",
     "axios": "^1.7.0",
     "express": "^5.0.1",
+    "fast-xml-parser": "^5.5.10",
     "zod": "^3.24.0"
   },
   "devDependencies": {

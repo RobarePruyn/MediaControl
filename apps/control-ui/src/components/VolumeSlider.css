@@ -1,0 +1,49 @@
+/* Volume slider styles */
+
+.volume-slider {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.volume-range {
+  flex: 1;
+  -webkit-appearance: none;
+  appearance: none;
+  height: 6px;
+  border-radius: 3px;
+  outline: none;
+  cursor: pointer;
+}
+
+.volume-range:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.volume-range::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--brand-primary);
+  border: 2px solid var(--brand-text-on-primary);
+  cursor: pointer;
+}
+
+.volume-range::-moz-range-thumb {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--brand-primary);
+  border: 2px solid var(--brand-text-on-primary);
+  cursor: pointer;
+}
+
+.volume-value {
+  font-size: 0.85rem;
+  font-weight: 600;
+  min-width: 36px;
+  text-align: right;
+  color: var(--brand-text-on-secondary);
+}

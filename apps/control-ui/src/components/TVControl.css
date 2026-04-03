@@ -1,0 +1,110 @@
+/* TV Control component styles */
+
+.tv-control {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--brand-button-radius);
+  padding: 1.25rem;
+  transition: opacity 0.2s;
+}
+
+.tv-off {
+  opacity: 0.5;
+}
+
+.tv-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 1rem;
+}
+
+.tv-name {
+  font-weight: 600;
+  font-size: 0.95rem;
+}
+
+.tv-power-btn {
+  width: 36px;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: var(--color-border);
+  color: var(--color-text-muted);
+  padding: 0;
+}
+
+.tv-power-on {
+  background: var(--brand-accent);
+  color: #fff;
+}
+
+.tv-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.tv-label {
+  font-size: 0.7rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--color-text-muted);
+}
+
+.tv-channel-section {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.tv-channel-controls {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.tv-ch-btn {
+  width: 36px;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--brand-button-radius);
+  background: var(--brand-primary);
+  color: var(--brand-text-on-primary);
+  padding: 0;
+}
+
+.tv-channel-number {
+  font-size: 1.5rem;
+  font-weight: 700;
+  min-width: 48px;
+  text-align: center;
+  color: var(--brand-text-on-secondary);
+}
+
+.tv-volume-section {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.tv-volume-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.tv-mute-btn {
+  background: transparent;
+  color: var(--brand-text-on-secondary);
+  padding: 0.25rem;
+}
+
+.tv-muted {
+  color: var(--color-danger);
+}

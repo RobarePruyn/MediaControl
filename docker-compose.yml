@@ -1,0 +1,134 @@
+# SuiteCommand — Docker Compose (Phase 1, on-premises deployment)
+# All services run on a single host behind an nginx reverse proxy with TLS.
+
+services:
+  # ---------------------------------------------------------------------------
+  # PostgreSQL — persistent configuration and audit log
+  # ---------------------------------------------------------------------------
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: suitecommand
+      POSTGRES_PASSWORD: suitecommand_dev
+      POSTGRES_DB: suitecommand
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U suitecommand -d suitecommand"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  # ---------------------------------------------------------------------------
+  # Redis — device state cache and WebSocket pub/sub
+  # ---------------------------------------------------------------------------
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    volumes:
+      - redis-data:/data
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ---------------------------------------------------------------------------
+  # API Server — core REST + WebSocket API
+  # ---------------------------------------------------------------------------
+  api-server:
+    build:
+      context: .
+      dockerfile: services/api-server/Dockerfile
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      PORT: "4000"
+      DATABASE_URL: postgresql://suitecommand:suitecommand_dev@postgres:5432/suitecommand
+      REDIS_URL: redis://redis:6379
+      # DEV-ONLY secrets — replace with strong random values in production
+      JWT_ACCESS_SECRET: dev-jwt-access-secret-replace-in-production-abc123
+      JWT_REFRESH_SECRET: dev-jwt-refresh-secret-replace-in-production-xyz789
+      CREDENTIAL_ENCRYPTION_KEY: dev-encryption-key-replace-in-production-0123456789abcdef
+      BRIDGE_AGENT_URL: http://bridge-agent:4001
+      BRIDGE_INTERNAL_SECRET: dev-bridge-internal-secret-replace-in-production
+      HOST: https://suitecommand.local
+      QR_STORAGE_PATH: /app/qr-storage
+      CORS_ALLOWED_ORIGINS: https://suitecommand.local
+      TLS_CERT_PATH: /etc/nginx/certs/server.crt
+      TLS_KEY_PATH: /etc/nginx/certs/server.key
+      TLS_CERT_STORAGE_PATH: /app/tls-storage
+    volumes:
+      - qr-storage:/app/qr-storage
+      - nginx-certs:/etc/nginx/certs
+
+  # ---------------------------------------------------------------------------
+  # Bridge Agent — on-prem device API bridge (internal only, not exposed)
+  # ---------------------------------------------------------------------------
+  bridge-agent:
+    build:
+      context: .
+      dockerfile: services/bridge-agent/Dockerfile
+    restart: unless-stopped
+    depends_on:
+      - api-server
+    environment:
+      NODE_ENV: production
+      PORT: "4001"
+      BRIDGE_INTERNAL_SECRET: dev-bridge-internal-secret-replace-in-production
+      API_SERVER_URL: http://api-server:4000
+    # No ports exposed — only reachable within the Docker network
+
+  # ---------------------------------------------------------------------------
+  # Admin UI — React/Vite admin interface
+  # ---------------------------------------------------------------------------
+  admin-ui:
+    build:
+      context: .
+      dockerfile: apps/admin-ui/Dockerfile
+    restart: unless-stopped
+
+  # ---------------------------------------------------------------------------
+  # Control UI — React/Vite end-user guest control interface
+  # ---------------------------------------------------------------------------
+  control-ui:
+    build:
+      context: .
+      dockerfile: apps/control-ui/Dockerfile
+    restart: unless-stopped
+
+  # ---------------------------------------------------------------------------
+  # Nginx — reverse proxy, TLS termination, static file serving
+  # ---------------------------------------------------------------------------
+  nginx:
+    build:
+      context: ./nginx
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    depends_on:
+      - api-server
+      - admin-ui
+      - control-ui
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - nginx-certs:/etc/nginx/certs
+      - qr-storage:/app/qr-storage:ro
+
+volumes:
+  postgres-data:
+  redis-data:
+  qr-storage:
+  nginx-certs:

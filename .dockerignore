@@ -1,0 +1,35 @@
+# Dependencies — each stage installs its own
+node_modules
+**/node_modules
+
+# Build output — each stage builds its own
+**/dist
+**/tsconfig.tsbuildinfo
+
+# Git
+.git
+.gitignore
+
+# Environment files (secrets must not leak into images)
+.env
+.env.*
+!.env.example
+!**/.env.example
+
+# Documentation and non-build files
+CLAUDE.md
+Cisco:WiPro API Documentation/
+
+# Runtime data volumes (managed by Docker, not baked into images)
+qr-storage/
+nginx/certs/
+
+# OS and editor files
+.DS_Store
+**/.DS_Store
+*.log
+**/npm-debug.log*
+coverage/
+**/.nyc_output
+.vscode/
+.idea/
