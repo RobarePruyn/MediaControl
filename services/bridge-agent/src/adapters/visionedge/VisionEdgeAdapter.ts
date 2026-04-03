@@ -112,7 +112,8 @@ export class VisionEdgeAdapter extends BasePlatformAdapter {
 
     const inputsMap = new Map<string, string[]>();
     for (const pi of inputsData.playerInputsList?.playerInputs ?? []) {
-      const rawInputs = pi.inputs ?? [];
+      // XML parses as <inputs><input>...</input></inputs> → { input: [...] }
+      const rawInputs = pi.inputs?.input ?? [];
       inputsMap.set(
         String(pi.id),
         rawInputs.map((inp) => inp.name),
@@ -125,11 +126,13 @@ export class VisionEdgeAdapter extends BasePlatformAdapter {
       const features = featuresMap.get(playerId);
       const capabilities = new Set<ControlCommandType>();
 
-      // features.features is parsed by fast-xml-parser as VEFeature[]
-      // (isArray config ensures <feature> elements are always an array)
-      for (const feat of features?.features ?? []) {
-        const fStr = String(feat) as VEFeature;
-        const cmd = mapFeatureToCommandType(fStr);
+      // XML parses as <features><feature>X</feature></features> — may be array or wrapper object
+      const rawFeatures = features?.features;
+      const featureList: VEFeature[] = Array.isArray(rawFeatures)
+        ? rawFeatures
+        : (rawFeatures as { feature?: VEFeature[] } | undefined)?.feature ?? [];
+      for (const feat of featureList) {
+        const cmd = mapFeatureToCommandType(String(feat) as VEFeature);
         if (cmd) capabilities.add(cmd);
       }
 

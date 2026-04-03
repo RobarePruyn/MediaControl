@@ -55,17 +55,17 @@ export type VEFeature =
 export interface VEPlayerFeatures {
   id: string;
   volumeLevels?: number;
-  features: VEFeature[];
+  features?: VEFeature[] | { feature?: VEFeature[] };
 }
 
 /**
  * Parsed from GET config/inputs/player → <playerInputsList>
  * XML structure: <playerInputs><id/><inputs><input><name/><value/></input>...</inputs></playerInputs>
- * fast-xml-parser with isArray on 'input' yields inputs as an array of {name, value}.
+ * fast-xml-parser parses <inputs> as a wrapper object containing an <input> array.
  */
 export interface VEPlayerInputs {
   id: string;
-  inputs: Array<{ name: string; value: string }>;
+  inputs?: { input?: Array<{ name: string; value: string }> };
 }
 
 // ─── Channel Guide Response ────────────────────────────────────────────
