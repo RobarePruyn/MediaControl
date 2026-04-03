@@ -1,6 +1,7 @@
 /**
  * Controllers management page.
  * Lists, creates, tests, and polls device controllers.
+ * Platforms are organized by category (IPTV, Audio, Video, Lighting, BMS).
  * Connection config fields are platform-specific.
  * @module admin-ui/pages/ControllersPage
  */
@@ -16,37 +17,99 @@ import {
   usePollController,
 } from '../api/hooks.js';
 import { Plus, Pencil, Plug, RefreshCw, Trash2 } from 'lucide-react';
-import type { Controller } from '@suitecommand/types';
+import type { Controller, ControllerCategory } from '@suitecommand/types';
 import './pages.css';
 
-/** Supported platforms and their display names */
-const PLATFORMS = [
-  { slug: 'visionedge', label: 'WiPro VisionEdge' },
-  { slug: 'vitec', label: 'VITEC' },
-  { slug: 'tripleplay', label: 'TriplePlay' },
-  { slug: 'qsys', label: 'Q-SYS' },
-] as const;
+// ─── Platform Registry ───────────────────────────────────────────────
+//
+// To add a new platform:
+//   1. Add an entry to PLATFORMS with the correct category
+//   2. Add connection config fields to PLATFORM_FIELDS
+//   3. Implement the adapter in services/bridge-agent/src/adapters/
+//   4. Register the adapter in the adapter registry
+//
+// Categories:
+//   iptv     — IPTV / TV control
+//   audio    — Overhead / zone audio
+//   video    — Video routing / switching
+//   lighting — Lighting control
+//   bms      — Building management / environmental
+// ─────────────────────────────────────────────────────────────────────
 
-/** Per-platform connection config field definitions */
-const PLATFORM_FIELDS: Record<string, Array<{ key: string; label: string; type: string; placeholder: string; required: boolean }>> = {
+/** Platform definition with its category and display name */
+interface PlatformDef {
+  slug: string;
+  label: string;
+  category: ControllerCategory;
+}
+
+/** All supported platforms, grouped by category */
+const PLATFORMS: PlatformDef[] = [
+  // ── IPTV ──
+  { slug: 'visionedge', label: 'WiPro VisionEdge', category: 'iptv' },
+  // Future: { slug: 'vitec',       label: 'VITEC',              category: 'iptv' },
+  // Future: { slug: 'tripleplay',  label: 'TriplePlay',         category: 'iptv' },
+
+  // ── Audio ──
+  // Future: { slug: 'qsys',        label: 'Q-SYS',             category: 'audio' },
+  // Future: { slug: 'omni',        label: 'Omni',              category: 'audio' },
+
+  // ── Video ──
+  // Future: { slug: 'crestron',    label: 'Crestron',          category: 'video' },
+  // Future: { slug: 'extron',      label: 'Extron',            category: 'video' },
+
+  // ── Lighting ──
+  // Future: { slug: 'lutron',      label: 'Lutron',            category: 'lighting' },
+  // Future: { slug: 'etc',         label: 'ETC',               category: 'lighting' },
+
+  // ── BMS ──
+  // Future: { slug: 'generic-bms', label: 'Generic BMS',       category: 'bms' },
+];
+
+/** Human-readable labels for each category */
+const CATEGORY_LABELS: Record<ControllerCategory, string> = {
+  iptv: 'IPTV',
+  audio: 'Audio',
+  video: 'Video',
+  lighting: 'Lighting',
+  bms: 'BMS',
+};
+
+/** Categories that currently have platforms available */
+const AVAILABLE_CATEGORIES = [...new Set(PLATFORMS.map(p => p.category))];
+
+/**
+ * Per-platform connection config field definitions.
+ * Each field maps to a key in the encrypted connectionConfig JSON.
+ *
+ * To add fields for a new platform, add an entry here keyed by platform slug.
+ */
+const PLATFORM_FIELDS: Record<string, Array<{
+  key: string;
+  label: string;
+  type: string;
+  placeholder: string;
+  required: boolean;
+}>> = {
   visionedge: [
     { key: 'baseUrl', label: 'Server Address', type: 'text', placeholder: 'https://10.193.1.111', required: true },
     { key: 'pin', label: 'PIN', type: 'password', placeholder: 'Controller PIN', required: true },
     { key: 'groupId', label: 'Group ID (optional)', type: 'text', placeholder: 'Scope to a specific control group', required: false },
   ],
-  vitec: [
-    { key: 'baseUrl', label: 'Server Address', type: 'text', placeholder: 'http://192.168.1.100', required: true },
-    { key: 'apiKey', label: 'API Key', type: 'password', placeholder: 'API authentication key', required: true },
-  ],
-  tripleplay: [
-    { key: 'baseUrl', label: 'Server Address', type: 'text', placeholder: 'http://192.168.1.100', required: true },
-    { key: 'username', label: 'Username', type: 'text', placeholder: 'API username', required: true },
-    { key: 'password', label: 'Password', type: 'password', placeholder: 'API password', required: true },
-  ],
-  qsys: [
-    { key: 'baseUrl', label: 'Core Address', type: 'text', placeholder: 'http://192.168.1.100', required: true },
-    { key: 'pin', label: 'PIN', type: 'password', placeholder: 'Core PIN', required: false },
-  ],
+  // Future platforms — uncomment and adjust when adapters are built:
+  // vitec: [
+  //   { key: 'baseUrl', label: 'Server Address', type: 'text', placeholder: 'http://192.168.1.100', required: true },
+  //   { key: 'apiKey',  label: 'API Key',        type: 'password', placeholder: 'API authentication key', required: true },
+  // ],
+  // tripleplay: [
+  //   { key: 'baseUrl',  label: 'Server Address', type: 'text', placeholder: 'http://192.168.1.100', required: true },
+  //   { key: 'username', label: 'Username',       type: 'text', placeholder: 'API username',           required: true },
+  //   { key: 'password', label: 'Password',       type: 'password', placeholder: 'API password',       required: true },
+  // ],
+  // qsys: [
+  //   { key: 'baseUrl', label: 'Core Address', type: 'text', placeholder: 'http://192.168.1.100', required: true },
+  //   { key: 'pin',     label: 'PIN',          type: 'password', placeholder: 'Core PIN',          required: false },
+  // ],
 };
 
 export function ControllersPage() {
@@ -62,6 +125,7 @@ export function ControllersPage() {
 
   // Create form state
   const [name, setName] = useState('');
+  const [category, setCategory] = useState<ControllerCategory>('iptv');
   const [platformSlug, setPlatformSlug] = useState('visionedge');
   const [configFields, setConfigFields] = useState<Record<string, string>>({});
 
@@ -72,7 +136,17 @@ export function ControllersPage() {
   const [editConfigFields, setEditConfigFields] = useState<Record<string, string>>({});
   const [editActive, setEditActive] = useState(true);
 
-  // Reset config fields when platform changes
+  // Filter platforms by selected category
+  const platformsForCategory = PLATFORMS.filter(p => p.category === category);
+
+  // Reset platform and config when category changes
+  useEffect(() => {
+    const first = PLATFORMS.find(p => p.category === category);
+    if (first) setPlatformSlug(first.slug);
+    setConfigFields({});
+  }, [category]);
+
+  // Reset config when platform changes
   useEffect(() => {
     setConfigFields({});
   }, [platformSlug]);
@@ -93,6 +167,7 @@ export function ControllersPage() {
     }
     await createController.mutateAsync({
       name,
+      category,
       platformSlug,
       venueId: venueId!,
       connectionConfig,
@@ -106,7 +181,6 @@ export function ControllersPage() {
     e.preventDefault();
     if (!editing) return;
     const body: Record<string, unknown> = { name: editName, isActive: editActive };
-    // Only send connectionConfig if any field was filled in
     const hasConfigChanges = Object.values(editConfigFields).some(v => v);
     if (hasConfigChanges) {
       const connectionConfig: Record<string, unknown> = { platform: editing.platformSlug };
@@ -153,6 +227,7 @@ export function ControllersPage() {
             <thead>
               <tr>
                 <th>Name</th>
+                <th>Category</th>
                 <th>Platform</th>
                 <th>Status</th>
                 <th>Last Polled</th>
@@ -163,6 +238,7 @@ export function ControllersPage() {
               {controllers.map((c) => (
                 <tr key={c.id}>
                   <td>{c.name}</td>
+                  <td><span className="badge">{CATEGORY_LABELS[c.category] ?? c.category}</span></td>
                   <td><span className="badge badge-info">{PLATFORMS.find(p => p.slug === c.platformSlug)?.label ?? c.platformSlug}</span></td>
                   <td>
                     <span className={`status-dot ${c.isActive ? 'status-dot-active' : 'status-dot-inactive'}`} />
@@ -250,9 +326,17 @@ export function ControllersPage() {
                 <input value={name} onChange={(e) => setName(e.target.value)} required autoFocus />
               </div>
               <div className="form-group">
+                <label>Category</label>
+                <select value={category} onChange={(e) => setCategory(e.target.value as ControllerCategory)}>
+                  {AVAILABLE_CATEGORIES.map((cat) => (
+                    <option key={cat} value={cat}>{CATEGORY_LABELS[cat]}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="form-group">
                 <label>Platform</label>
                 <select value={platformSlug} onChange={(e) => setPlatformSlug(e.target.value)}>
-                  {PLATFORMS.map((p) => (
+                  {platformsForCategory.map((p) => (
                     <option key={p.slug} value={p.slug}>{p.label}</option>
                   ))}
                 </select>

@@ -159,6 +159,7 @@ async function main(): Promise<void> {
       id: controllerId,
       venueId,
       name: 'Main VisionEdge',
+      category: 'iptv',
       platformSlug: 'visionedge',
       connectionConfig,
       isActive: true,

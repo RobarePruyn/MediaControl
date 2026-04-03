@@ -25,6 +25,11 @@ export const userRoleEnum = pgEnum('user_role', ['super_admin', 'app_admin', 've
 export const groupTypeEnum = pgEnum('group_type', ['suite', 'room', 'zone', 'boh']);
 export const accessTierEnum = pgEnum('access_tier', ['event', 'seasonal', 'permanent']);
 export const idpProtocolEnum = pgEnum('idp_protocol', ['oidc', 'saml', 'ldap']);
+/**
+ * Controller categories — the type of system a controller manages.
+ * Add new categories here as SuiteCommand expands to new device types.
+ */
+export const controllerCategoryEnum = pgEnum('controller_category', ['iptv', 'audio', 'video', 'lighting', 'bms']);
 export const triggerActionTypeEnum = pgEnum('trigger_action_type', ['command', 'delay', 'conditional']);
 export const triggerExecutionStateEnum = pgEnum('trigger_execution_state', ['running', 'completed', 'failed', 'cancelled']);
 
@@ -86,6 +91,8 @@ export const controllers = pgTable('controllers', {
   id: uuid('id').primaryKey().defaultRandom(),
   venueId: uuid('venue_id').notNull().references(() => venues.id),
   name: varchar('name', { length: 255 }).notNull(),
+  /** System category: iptv, audio, video, lighting, bms */
+  category: controllerCategoryEnum('category').notNull().default('iptv'),
   platformSlug: varchar('platform_slug', { length: 50 }).notNull(),
   /** Encrypted JSONB — contains platform credentials. Never return to clients. */
   connectionConfig: text('connection_config').notNull(),

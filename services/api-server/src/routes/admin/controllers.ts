@@ -17,6 +17,7 @@ import { AppError, ErrorCode } from '../../errors.js';
 
 const createSchema = z.object({
   name: z.string().min(1).max(255),
+  category: z.enum(['iptv', 'audio', 'video', 'lighting', 'bms']),
   platformSlug: z.string().min(1).max(50),
   connectionConfig: z.record(z.unknown()),
   pollIntervalSeconds: z.number().int().min(30).optional(),
@@ -51,6 +52,7 @@ export function createControllerRoutes(
         id: controllers.id,
         venueId: controllers.venueId,
         name: controllers.name,
+        category: controllers.category,
         platformSlug: controllers.platformSlug,
         isActive: controllers.isActive,
         lastPolledAt: controllers.lastPolledAt,
@@ -75,6 +77,7 @@ export function createControllerRoutes(
       .values({
         venueId,
         name: body.name,
+        category: body.category,
         platformSlug: body.platformSlug,
         connectionConfig: encrypted,
         pollIntervalSeconds: body.pollIntervalSeconds ?? 300,
@@ -94,6 +97,7 @@ export function createControllerRoutes(
         id: controllers.id,
         venueId: controllers.venueId,
         name: controllers.name,
+        category: controllers.category,
         platformSlug: controllers.platformSlug,
         isActive: controllers.isActive,
         lastPolledAt: controllers.lastPolledAt,

@@ -1,0 +1,2 @@
+CREATE TYPE "public"."controller_category" AS ENUM('iptv', 'audio', 'video', 'lighting', 'bms');--> statement-breakpoint
+ALTER TABLE "controllers" ADD COLUMN "category" "controller_category" DEFAULT 'iptv' NOT NULL;

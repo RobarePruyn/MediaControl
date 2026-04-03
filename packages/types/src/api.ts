@@ -4,7 +4,7 @@
  * @module @suitecommand/types/api
  */
 
-import type { AccessTier, GroupType, IdpProtocol, PlanTier, TriggerActionType, TriggerTargetType, UserRole } from './tenant.js';
+import type { AccessTier, ControllerCategory, GroupType, IdpProtocol, PlanTier, TriggerActionType, TriggerTargetType, UserRole } from './tenant.js';
 
 // ─── Common Response Wrappers ──────────────────────────────────────────
 
@@ -73,6 +73,7 @@ export interface RefreshTokenResponse {
 /** Create controller request */
 export interface CreateControllerRequest {
   name: string;
+  category: ControllerCategory;
   platformSlug: string;
   connectionConfig: Record<string, unknown>;
   venueId: string;

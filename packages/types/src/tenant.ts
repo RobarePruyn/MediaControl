@@ -10,6 +10,19 @@ export type PlanTier = 'basic' | 'professional' | 'enterprise';
 /** User roles within the system — 5-tier hierarchy */
 export type UserRole = 'super_admin' | 'app_admin' | 'venue_super_admin' | 'venue_operator' | 'end_user';
 
+/**
+ * Controller categories — the type of system a controller manages.
+ * Each platform belongs to exactly one category.
+ *
+ * Current categories:
+ *   - iptv:     IPTV / TV control (VisionEdge, VITEC, TriplePlay)
+ *   - audio:    Overhead / zone audio (Q-SYS, Omni)
+ *   - video:    Video routing / switching (Crestron, Extron)
+ *   - lighting: Lighting control (Lutron, ETC)
+ *   - bms:      Building management / environmental (generic BMS, HVAC)
+ */
+export type ControllerCategory = 'iptv' | 'audio' | 'video' | 'lighting' | 'bms';
+
 /** Group types representing physical spaces in a venue */
 export type GroupType = 'suite' | 'room' | 'zone' | 'boh';
 
@@ -63,6 +76,8 @@ export interface Controller {
   id: string;
   venueId: string;
   name: string;
+  /** System category this controller manages (iptv, audio, video, lighting, bms) */
+  category: ControllerCategory;
   platformSlug: string;
   /** Connection config is encrypted at rest; never returned to clients */
   connectionConfig?: unknown;
