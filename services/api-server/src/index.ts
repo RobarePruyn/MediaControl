@@ -33,6 +33,8 @@ import { createEventRoutes } from './routes/admin/events.js';
 import { createTlsRoutes } from './routes/admin/tls.js';
 import { createIdentityProviderRoutes } from './routes/admin/identityProviders.js';
 import { createTriggerRoutes } from './routes/admin/triggers.js';
+import { createQrRoutes } from './routes/qr/index.js';
+import { createControlRoutes } from './routes/control/index.js';
 import { initWebSocketHub } from './websocket/index.js';
 
 // ─── Config ────────────────────────────────────────────────────────────
@@ -86,12 +88,17 @@ adminRouter.use('/branding', createBrandingRoutes(db));
 adminRouter.use('/events', createEventRoutes(db));
 adminRouter.use('/tls', createTlsRoutes(db, config.QR_STORAGE_PATH.replace('qr-storage', 'tls-storage')));
 adminRouter.use('/identity-providers', createIdentityProviderRoutes(db, config.CREDENTIAL_ENCRYPTION_KEY));
-adminRouter.use('/triggers', createTriggerRoutes(db));
+adminRouter.use('/triggers', createTriggerRoutes(db, bridgeClient, stateCache, config.CREDENTIAL_ENCRYPTION_KEY));
 
 app.use('/api/admin', adminRouter);
 
+// ─── QR Code Routes (Public) ───────────────────────────────────────────
+
+app.use('/api/qr', createQrRoutes(db, qrService, config.HOST));
+
 // ─── Control Routes (Token-Gated, No Auth) ────────────────────────────
-// Will be added in build step 7.
+
+app.use('/api/control', createControlRoutes(db, bridgeClient, stateCache, config.CREDENTIAL_ENCRYPTION_KEY));
 
 // ─── WebSocket ─────────────────────────────────────────────────────────
 

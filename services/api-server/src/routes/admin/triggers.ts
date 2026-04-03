@@ -19,6 +19,9 @@ import {
 } from '../../db/schema.js';
 import type { TenantScopedRequest } from '../../middleware/tenantScope.js';
 import type { AuthenticatedRequest } from '../../middleware/auth.js';
+import type { BridgeClient } from '../../services/bridgeClient.js';
+import type { StateCache } from '../../services/stateCache.js';
+import { executeTrigger } from '../../services/triggerEngine.js';
 import { AppError, ErrorCode } from '../../errors.js';
 
 const createSchema = z.object({
@@ -51,8 +54,16 @@ const setTargetsSchema = z.object({
 /**
  * Create trigger admin routes.
  * @param db - Database client
+ * @param bridgeClient - Bridge agent client (for trigger execution)
+ * @param stateCache - Redis state cache (for trigger execution)
+ * @param encryptionKey - Credential encryption key (for trigger execution)
  */
-export function createTriggerRoutes(db: Database): RouterType {
+export function createTriggerRoutes(
+  db: Database,
+  bridgeClient?: BridgeClient,
+  stateCache?: StateCache,
+  encryptionKey?: string,
+): RouterType {
   const router: RouterType = Router();
 
   /** GET /api/admin/triggers — List triggers for venue */
@@ -226,8 +237,10 @@ export function createTriggerRoutes(db: Database): RouterType {
       })
       .returning();
 
-    // Actual execution happens asynchronously in the trigger engine (build step 8)
-    // For now, return the execution ID for polling
+    // Fire async execution — do not await
+    if (bridgeClient && stateCache && encryptionKey) {
+      void executeTrigger(execution.id, id, db, bridgeClient, stateCache, encryptionKey);
+    }
 
     res.status(202).json({
       success: true,
