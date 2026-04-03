@@ -62,8 +62,12 @@ export interface CvdResponse<T> {
  * @returns Object with typed methods for each API category
  */
 export function createVisionEdgeClient(config: VisionEdgeConnectionConfig) {
+  // Normalize baseUrl — accept plain IP/FQDN and prepend https:// if no protocol
+  const rawUrl = config.baseUrl.trim();
+  const baseUrl = /^https?:\/\//i.test(rawUrl) ? rawUrl : `https://${rawUrl}`;
+
   const httpClient: AxiosInstance = axios.create({
-    baseURL: `${config.baseUrl.replace(/\/$/, '')}${API_BASE_PATH}`,
+    baseURL: `${baseUrl.replace(/\/$/, '')}${API_BASE_PATH}`,
     timeout: 15000,
     headers: {
       'Accept': 'application/xml',

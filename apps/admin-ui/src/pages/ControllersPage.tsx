@@ -92,7 +92,7 @@ const PLATFORM_FIELDS: Record<string, Array<{
   required: boolean;
 }>> = {
   visionedge: [
-    { key: 'baseUrl', label: 'Server Address', type: 'text', placeholder: 'https://10.193.1.111', required: true },
+    { key: 'baseUrl', label: 'Server Address', type: 'text', placeholder: '10.193.1.111', required: true },
     { key: 'pin', label: 'PIN', type: 'password', placeholder: 'Controller PIN', required: true },
     { key: 'groupId', label: 'Group ID (optional)', type: 'text', placeholder: 'Scope to a specific control group', required: false },
   ],
