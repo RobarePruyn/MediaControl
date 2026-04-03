@@ -55,6 +55,8 @@ export function ControllersPage() {
     setEditing(null);
   };
 
+  const [search, setSearch] = useState('');
+
   const [name, setName] = useState('');
   const [type, setType] = useState<'suite' | 'room' | 'zone' | 'boh'>('suite');
   const [description, setDescription] = useState('');
@@ -83,11 +85,31 @@ export function ControllersPage() {
         </div>
       </div>
 
+      <div className="filter-bar">
+        <input
+          type="text"
+          placeholder="Search controllers..."
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          style={{ minWidth: 200 }}
+        />
+      </div>
+
       {isLoading ? (
         <p className="empty-text">Loading...</p>
       ) : !groups?.length ? (
         <p className="empty-text">No controllers created yet. Add one to set up a control page for a suite or zone.</p>
-      ) : (
+      ) : (() => {
+        const searchLower = search.toLowerCase();
+        const filtered = groups.filter((g) =>
+          !search ||
+          g.name.toLowerCase().includes(searchLower) ||
+          g.type.toLowerCase().includes(searchLower) ||
+          (g.description || '').toLowerCase().includes(searchLower)
+        );
+        return !filtered.length ? (
+          <p className="empty-text">No controllers match your search.</p>
+        ) : (
         <div className="data-table-wrap">
           <table>
             <thead>
@@ -99,7 +121,7 @@ export function ControllersPage() {
               </tr>
             </thead>
             <tbody>
-              {groups.map((g) => (
+              {filtered.map((g) => (
                 <tr key={g.id}>
                   <td>{g.name}</td>
                   <td><span className="badge badge-info">{g.type}</span></td>
@@ -122,7 +144,8 @@ export function ControllersPage() {
             </tbody>
           </table>
         </div>
-      )}
+        );
+      })()}
 
       {showCreate && (
         <div className="modal-overlay" onClick={() => setShowCreate(false)}>

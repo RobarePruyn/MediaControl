@@ -25,6 +25,7 @@ export function EndpointsPage() {
   const bulkAssign = useBulkAssignEndpoints(venueId!);
   const pollStatus = usePollEndpointStatus(venueId!);
 
+  const [search, setSearch] = useState('');
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [assignGroupId, setAssignGroupId] = useState('');
   const [pollResult, setPollResult] = useState<string | null>(null);
@@ -39,9 +40,9 @@ export function EndpointsPage() {
   };
 
   const toggleAll = () => {
-    if (!endpoints) return;
-    if (selected.size === endpoints.length) setSelected(new Set());
-    else setSelected(new Set(endpoints.map((e) => e.id)));
+    if (!filteredEndpoints) return;
+    if (selected.size === filteredEndpoints.length) setSelected(new Set());
+    else setSelected(new Set(filteredEndpoints.map((e) => e.id)));
   };
 
   const handleBulkAssign = async () => {
@@ -61,12 +62,19 @@ export function EndpointsPage() {
     }
   };
 
+  const searchLower = search.toLowerCase();
+  const filteredEndpoints = endpoints?.filter((ep) =>
+    !search ||
+    ep.displayName.toLowerCase().includes(searchLower) ||
+    ep.deviceType.toLowerCase().includes(searchLower)
+  );
+
   // Determine which state columns have data across all endpoints
-  const hasAnyPower = endpoints?.some(ep => ep.currentState?.isPoweredOn != null) ?? false;
-  const hasAnyChannel = endpoints?.some(ep => ep.currentState?.currentChannelNumber != null) ?? false;
-  const hasAnyVolume = endpoints?.some(ep => ep.currentState?.volumeLevel != null) ?? false;
-  const hasAnyInput = endpoints?.some(ep => ep.currentState?.currentInput != null) ?? false;
-  const hasAnyMute = endpoints?.some(ep => ep.currentState?.isMuted != null) ?? false;
+  const hasAnyPower = filteredEndpoints?.some(ep => ep.currentState?.isPoweredOn != null) ?? false;
+  const hasAnyChannel = filteredEndpoints?.some(ep => ep.currentState?.currentChannelNumber != null) ?? false;
+  const hasAnyVolume = filteredEndpoints?.some(ep => ep.currentState?.volumeLevel != null) ?? false;
+  const hasAnyInput = filteredEndpoints?.some(ep => ep.currentState?.currentInput != null) ?? false;
+  const hasAnyMute = filteredEndpoints?.some(ep => ep.currentState?.isMuted != null) ?? false;
 
   return (
     <div className="page">
@@ -90,6 +98,13 @@ export function EndpointsPage() {
       </div>
 
       <div className="filter-bar">
+        <input
+          type="text"
+          placeholder="Search endpoints..."
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          style={{ minWidth: 200 }}
+        />
         <select value={filterController} onChange={(e) => setFilterController(e.target.value)}>
           <option value="">All Controllers</option>
           {controllers?.map((c) => (
@@ -121,13 +136,15 @@ export function EndpointsPage() {
         <p className="empty-text">Loading...</p>
       ) : !endpoints?.length ? (
         <p className="empty-text">No endpoints discovered. Poll a connection to discover devices.</p>
+      ) : !filteredEndpoints?.length ? (
+        <p className="empty-text">No endpoints match your search.</p>
       ) : (
         <div className="data-table-wrap">
           <table>
             <thead>
               <tr>
                 <th>
-                  <input type="checkbox" checked={selected.size === endpoints.length && endpoints.length > 0} onChange={toggleAll} />
+                  <input type="checkbox" checked={selected.size === filteredEndpoints.length && filteredEndpoints.length > 0} onChange={toggleAll} />
                 </th>
                 <th>Display Name</th>
                 <th>Device Type</th>
@@ -141,7 +158,7 @@ export function EndpointsPage() {
               </tr>
             </thead>
             <tbody>
-              {endpoints.map((ep) => (
+              {filteredEndpoints.map((ep) => (
                 <tr key={ep.id}>
                   <td>
                     <input type="checkbox" checked={selected.has(ep.id)} onChange={() => toggleSelect(ep.id)} />

@@ -58,6 +58,8 @@ export function ChannelsPage() {
     setEditing(null);
   };
 
+  const [search, setSearch] = useState('');
+
   const [displayName, setDisplayName] = useState('');
   const [channelNumber, setChannelNumber] = useState('');
   const [platformChannelId, setPlatformChannelId] = useState('');
@@ -93,6 +95,13 @@ export function ChannelsPage() {
       </div>
 
       <div className="filter-bar">
+        <input
+          type="text"
+          placeholder="Search channels..."
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          style={{ minWidth: 200 }}
+        />
         <select value={syncControllerId} onChange={(e) => setSyncControllerId(e.target.value)}>
           <option value="">Select connection to sync...</option>
           {controllers?.map((c) => (
@@ -108,7 +117,17 @@ export function ChannelsPage() {
         <p className="empty-text">Loading...</p>
       ) : !channels?.length ? (
         <p className="empty-text">No channels configured. Add manually or sync from a connection.</p>
-      ) : (
+      ) : (() => {
+        const searchLower = search.toLowerCase();
+        const filtered = channels.filter((ch) =>
+          !search ||
+          ch.displayName.toLowerCase().includes(searchLower) ||
+          ch.channelNumber.toLowerCase().includes(searchLower) ||
+          (ch.category || '').toLowerCase().includes(searchLower)
+        );
+        return !filtered.length ? (
+          <p className="empty-text">No channels match your search.</p>
+        ) : (
         <div className="data-table-wrap">
           <table>
             <thead>
@@ -123,7 +142,7 @@ export function ChannelsPage() {
               </tr>
             </thead>
             <tbody>
-              {channels.map((ch) => (
+              {filtered.map((ch) => (
                 <tr key={ch.id}>
                   <td>{ch.channelNumber}</td>
                   <td>{ch.displayName}</td>
@@ -160,7 +179,8 @@ export function ChannelsPage() {
             </tbody>
           </table>
         </div>
-      )}
+        );
+      })()}
 
       {showCreate && (
         <div className="modal-overlay" onClick={() => setShowCreate(false)}>
